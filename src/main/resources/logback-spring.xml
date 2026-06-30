@@ -83,7 +83,15 @@
 
     </springProfile>
 
+    <!-- Render / default (không có profile) — giống local -->
+    <springProfile name="default">
 
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
+        <root level="INFO">
+            <appender-ref ref="CONSOLEJSON"/>
+        </root>
+
+    </springProfile>
 
 </configuration>

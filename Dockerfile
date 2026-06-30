@@ -10,13 +10,12 @@ FROM eclipse-temurin:22-jre-alpine
 WORKDIR /app
 COPY --from=builder /app/target/fundamental-engine-*.jar app.jar
 
-# Render sets PORT env var
-# No profile needed — DB config hardcoded in default
-ENV SERVER_PORT=8088
+# Render default port = 10000
+ENV PORT=10000
 
 # JVM tuning for 512MB container (Render free tier)
 ENV JAVA_OPTS="-Xms128m -Xmx320m -XX:+UseSerialGC -XX:MaxMetaspaceSize=96m -Xss256k -XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 
-EXPOSE 8088
+EXPOSE 10000
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
