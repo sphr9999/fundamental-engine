@@ -12,7 +12,7 @@ server:
 
 management:
   server:
-    port: 8081
+    port: 8088
   endpoints:
     web:
       exposure:
@@ -143,35 +143,17 @@ spring:
 
 ---
 # ============================================================
-# RENDER (Render.com + Supabase PostgreSQL)
+# RENDER (Render.com + CockroachDB)
 spring:
   config:
     activate:
       on-profile: render
-
-  datasource:
-    url: ${DATABASE_URL}
-    username: ${DATABASE_USER}
-    password: ${DATABASE_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 20000
-      idle-timeout: 300000
 
   jpa:
     show-sql: false
     properties:
       hibernate:
         format_sql: false
-
-server:
-  port: ${PORT:8088}
-
-management:
-  server:
-    port: ${PORT:8088}
 
 logging:
   level:

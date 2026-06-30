@@ -11,7 +11,7 @@ WORKDIR /app
 COPY --from=builder /app/target/fundamental-engine-*.jar app.jar
 
 # Render sets PORT env var
-ENV SPRING_PROFILES_ACTIVE=render
+# No profile needed — DB config hardcoded in default
 ENV SERVER_PORT=8088
 
 # JVM tuning for 512MB container (Render free tier)
