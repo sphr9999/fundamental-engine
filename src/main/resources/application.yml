@@ -45,19 +45,31 @@ spring:
     hibernate:
       ddl-auto: none
 
+  # ── Old local PostgreSQL (uncomment to use) ──
+  # datasource:
+  #   url: jdbc:postgresql://localhost:5432/fundamental-engine
+  #   username: admin
+  #   password: 123456
+  #   driver-class-name: org.postgresql.Driver
+  #   hikari:
+  #     maximum-pool-size: 200
+  #     minimum-idle: 5
+
+  # ── CockroachDB Cloud (Singapore) ──
   datasource:
-    url: jdbc:postgresql://localhost:5432/fundamental-engine
-    username: admin
-    password: 123456
+    url: jdbc:postgresql://hungry-dunnart-17395.jxf.gcp-asia-southeast1.cockroachlabs.cloud:26257/fundamental_engine
+    username: sphr9999_gmail_com
+    password: _jfkDKWVDZPUFi-5YcBung
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 200
-      minimum-idle: 5
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
     enabled: true
-
 
   # Cache: using Caffeine in-memory (no Redis needed)
 
