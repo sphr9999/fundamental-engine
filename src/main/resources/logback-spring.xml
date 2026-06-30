@@ -83,13 +83,13 @@
 
     </springProfile>
 
-    <!-- Render / default (không có profile) — giống local -->
+    <!-- Render / default — plain text log, dễ đọc trên Render dashboard -->
     <springProfile name="default">
 
         <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
         <root level="INFO">
-            <appender-ref ref="CONSOLEJSON"/>
+            <appender-ref ref="CONSOLE"/>
         </root>
 
     </springProfile>

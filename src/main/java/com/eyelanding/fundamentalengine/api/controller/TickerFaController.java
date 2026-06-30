@@ -8,6 +8,8 @@ import com.eyelanding.fundamentalengine.application.ticker.TickerFaQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @Tag(name = "Ticker FA", description = "Fundamental analysis data per ticker")
 public class TickerFaController {
+
+    private static final Logger log = LoggerFactory.getLogger(TickerFaController.class);
 
     private final TickerFaQueryService queryService;
 
@@ -26,7 +30,15 @@ public class TickerFaController {
             @PathVariable String ticker,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) Long batchId) {
-        return ResponseEntity.ok(queryService.getOverview(ticker, period, batchId));
+        log.info("GET /tickers/{}/overview period={} batchId={}", ticker, period, batchId);
+        try {
+            TickerOverviewResponse response = queryService.getOverview(ticker, period, batchId);
+            log.info("GET /tickers/{}/overview -> OK, priceSource={}", ticker, response.getPriceSource());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("GET /tickers/{}/overview -> FAILED", ticker, e);
+            throw e;
+        }
     }
 
     /** GET /internal/fa/tickers/{ticker}/financials */
