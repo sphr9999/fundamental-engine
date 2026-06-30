@@ -226,24 +226,21 @@
 
 <!-- TOPNAV -->
 <nav id="topnav">
-  <div class="topnav-logo" onclick="showView('screener')">
-    <span class="logo-icon">🐢</span>
+  <div class="topnav-logo" onclick="showView('ticker')">
+    <span class="logo-icon">⚡</span>
     <span>FA <b>Engine</b></span>
   </div>
   
   <div class="nav-links">
     <div class="nav-item active" id="nav-screener" onclick="showView('screener')">Screener</div>
-    <div class="nav-item" id="nav-ticker" onclick="showView('ticker')" style="display:none">Detail</div>
+    <div class="nav-item" id="nav-ticker" onclick="showView('ticker')">Detail</div>
     <div class="nav-item" id="nav-benchmark" onclick="showView('benchmark')">Industry</div>
-    <div class="nav-item" id="nav-import" onclick="showView('import')">Import</div>
+    <div class="nav-item" id="nav-import" onclick="showView('import')" style="display:none">Import</div>
   </div>
   
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
     <input id="topSearch" type="text" placeholder="Tìm kiếm mã (FPT, ETH, AAVE...)" onkeydown="if(event.key==='Enter')lookupTicker(this.value)" />
-  </div>
-  <div style="font-size:13px; color:var(--text-muted); margin-left:16px;">
-    Batch: <span id="sidebar-batch-info">...</span>
   </div>
 </nav>
 
@@ -414,10 +411,14 @@ function showView(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   document.getElementById('nav-' + name)?.classList.add('active');
-  const titles = { screener: '⊞ Screener', ticker: '📋 Ticker Detail', benchmark: '📈 Industry Benchmark', import: '⬆ Import Excel' };
+  const titles = { screener: '⊞ Screener', ticker: '⚡ Ticker Detail', benchmark: '📈 Industry Benchmark', import: '⬆ Import Excel' };
   const titleEl = document.getElementById('topbar-title');
   if (titleEl) titleEl.textContent = titles[name] || name;
   if (name === 'benchmark' && document.getElementById('benchmark-body').children.length <= 1) loadBenchmark();
+  if (name === 'ticker' && !document.getElementById('view-ticker').dataset.loaded) {
+    document.getElementById('view-ticker').dataset.loaded = 'true';
+    lookupTicker('VIC');
+  }
 }
 
 // ═══ SCREENER ═══
@@ -692,7 +693,7 @@ function renderTickerDetail(ov, ratios, history, financials) {
   const commonOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 12 } } },
+    plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, padding: 16, font: { size: 12 }, usePointStyle: false } } },
     scales: {
       x: { grid: { display: false, drawBorder: false } },
       y: { grid: { color: '#1e2532' }, border: { dash: [4, 4] } }
@@ -941,7 +942,7 @@ function renderTickerDetail(ov, ratios, history, financials) {
           datasets: [
             { label: 'D/E Ratio', data: deRatio, borderColor: '#f44336', backgroundColor: 'rgba(244,67,54,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
             { label: 'Current Ratio', data: currentRatio, borderColor: '#4caf50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
-            { label: 'Nợ/Tài sản (%)', data: debtToAssets, borderColor: '#ff9800', tension: 0.3, yAxisID: 'y1', borderDash: [5, 5] }
+            { label: 'Nợ/Tài sản (%)', data: debtToAssets, borderColor: '#ff9800', tension: 0.3, yAxisID: 'y1' }
           ]
         },
         options: {
@@ -965,9 +966,9 @@ function renderTickerDetail(ov, ratios, history, financials) {
         labels: hist.map(h => h.period),
         datasets: [
           { label: 'FA Score', data: hist.map(h => h.overallScore), borderColor: '#4caf50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3, pointRadius: 3 },
-          { label: 'Growth', data: hist.map(h => h.growthScore), borderColor: '#4c9aff', tension: 0.3, pointRadius: 2, borderDash: [3, 3] },
-          { label: 'Profitability', data: hist.map(h => h.profitabilityScore), borderColor: '#00bcd4', tension: 0.3, pointRadius: 2, borderDash: [3, 3] },
-          { label: 'Valuation', data: hist.map(h => h.valuationScore), borderColor: '#ba68c8', tension: 0.3, pointRadius: 2, borderDash: [3, 3] }
+          { label: 'Growth', data: hist.map(h => h.growthScore), borderColor: '#4c9aff', tension: 0.3, pointRadius: 2 },
+          { label: 'Profitability', data: hist.map(h => h.profitabilityScore), borderColor: '#00bcd4', tension: 0.3, pointRadius: 2 },
+          { label: 'Valuation', data: hist.map(h => h.valuationScore), borderColor: '#ba68c8', tension: 0.3, pointRadius: 2 }
         ]
       },
       options: {
