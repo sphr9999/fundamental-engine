@@ -1,0 +1,121 @@
+databaseChangeLog:
+#  - changeSet:
+#      id: initTableTest
+#      author: tung.nt2
+#      validCheckSum: ANY
+#      preConditions:
+#        - onFail: MARK_RAN
+#          onFailMessage: "Table test already exists"
+#          not:
+#            tableExists:
+#              tableName: test
+#      changes:
+#        - sqlFile:
+#            dbms: postgresql
+#            encoding: utf8
+#            path: 00_init_table.sql
+#            relativeToChangelogFile: true
+#            splitStatements: true
+#            stripComments: true
+#        - tagDatabase:
+#            tag:  0.0.1
+#      rollback:
+#        - sqlFile:
+#            dbms: postgresql
+#            encoding: utf8
+#            path: ./rollback/00_rollback_init_table.sql
+#            relativeToChangelogFile: true
+#            splitStatements: true
+#            stripComments: true
+  - changeSet:
+      id: createPermissionsTable
+      author: tung.nt2
+      validCheckSum: ANY
+      preConditions:
+        - onFail: MARK_RAN
+          onFailMessage: "Table permissions already exists"
+          not:
+            tableExists:
+              tableName: permissions
+      changes:
+        - sqlFile:
+            dbms: postgresql
+            encoding: utf8
+            path: 01_create_permissions_table.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+        - tagDatabase:
+            tag: 1.0.0
+      rollback:
+        - sqlFile:
+            dbms: postgresql
+            encoding: utf8
+            path: ./rollback/01_rollback_create_permissions_table.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+  - changeSet:
+      id: createRolesAndRolePermissionTables
+      author: tung.nt2
+      validCheckSum: ANY
+      preConditions:
+        - onFail: MARK_RAN
+          onFailMessage: "Table roles or role_permission already exists"
+          not:
+            and:
+              - tableExists:
+                  tableName: roles
+              - tableExists:
+                  tableName: role_permission
+      changes:
+        - sqlFile:
+            dbms: postgresql
+            encoding: utf8
+            path: 02_create_roles_and_role_permission_tables.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+        - tagDatabase:
+            tag: 2.0.0
+      rollback:
+        - sqlFile:
+            dbms: postgresql
+            encoding: utf8
+            path: ./rollback/02_rollback_create_roles_and_role_permission_tables.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+  - changeSet:
+      id: createUsersAndAssociatedTables
+      author: tung.nt2
+      validCheckSum: ANY
+      preConditions:
+        - onFail: MARK_RAN
+          onFailMessage: "Table users, user_permission, or user_role already exists"
+          not:
+            and:
+              - tableExists:
+                  tableName: users
+              - tableExists:
+                  tableName: user_permission
+              - tableExists:
+                  tableName: user_role
+      changes:
+        - sqlFile:
+            dbms: postgresql
+            encoding: utf8
+            path: 03_create_users_and_associated_tables.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+        - tagDatabase:
+            tag: 3.0.0
+      rollback:
+        - sqlFile:
+            dbms: postgresql
+            encoding: utf8
+            path: ./rollback/03_rollback_create_users_and_associated_tables.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true

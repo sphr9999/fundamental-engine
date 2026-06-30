@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Nguồn: org/springframework/boot/logging/logback/ -->
+<configuration>
+
+    <!--=============================================================================================================-->
+    <!-- Common config -->
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <springProperty name="SERVICE_NAME" source="key.not.existing"
+                    defaultValue="lamb-policy-service"/> <!-- theo elasticapm.properties -->
+
+    <logger name="brave.Tracer" level="OFF"/>
+    <logger name="brave" level="OFF"/>
+
+    <root level="INFO"/>
+
+    <appender name="CONSOLEJSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+
+            <providers>
+                <pattern>
+                    <pattern>
+                        {
+                        "timestamp": "%date{dd-MM-yyyy HH:mm:ss}",
+<!--                        "traceId": "%mdc{traceId}",-->
+                        "level": "%level",
+                        "loggerName":"%logger",
+                        "message":"#tryJson{%message}"
+                        }
+                    </pattern>
+                </pattern>
+                <mdc />
+
+                <stackTrace>
+                    <fieldName>stackTrace</fieldName>
+                    <throwableConverter
+                            class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                        <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                        <rootCauseFirst>true</rootCauseFirst>
+                    </throwableConverter>
+                </stackTrace>
+
+            </providers>
+
+
+            <jsonGeneratorDecorator class="com.github.skjolber.decorators.SyntaxHighlightingDecorator">
+                <syntaxHighlighterFactory
+                        class="com.github.skjolber.decorators.factory.ConfigurableSyntaxHighlighterFactory">
+                    <stringValue>green</stringValue>
+                    <numberValue>green</numberValue>
+                    <fieldName>red</fieldName>
+                    <binaryValue>yellowBackground</binaryValue>
+                    <booleanValue>cyan</booleanValue>
+                    <nullValue>green</nullValue>
+                    <curlyBrackets>green</curlyBrackets>
+                    <squareBrackets>green</squareBrackets>
+                    <colon>green</colon>
+                    <whitespace>green</whitespace>
+                    <comma>green</comma>
+                </syntaxHighlighterFactory>
+                <syntaxHighlighterFactory
+                        class="com.github.skjolber.decorators.factory.LogLevelSyntaxHighlighterFactory">
+                    <level>
+                        <info>green</info>
+                        <warning>yellow</warning>
+                        <error>red</error>
+                    </level>
+                    <message>highIntensity green</message>
+                </syntaxHighlighterFactory>
+                <prettyPrint>true</prettyPrint>
+            </jsonGeneratorDecorator>
+        </encoder>
+    </appender>
+
+    <!-- Console text output dành cho môi trường local -->
+    <springProfile name="local">
+
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLEJSON"/>
+        </root>
+
+    </springProfile>
+
+
+
+
+</configuration>

@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FA Engine — Fundamental Analysis Dashboard</title>
+  <meta name="description" content="Phân tích cơ bản cổ phiếu Việt Nam — FA Score, Tỷ lệ tài chính, Screener theo ngành." />
+  <link rel="icon" href="data:," />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-primary:   #090d13;
+      --bg-card:      #12161f;
+      --bg-hover:     #1a202c;
+      --bg-input:     #171d27;
+      --border:       #1e2532;
+      --text-primary: #e6edf3;
+      --text-muted:   #8893a0;
+      --accent:       #4c9aff;
+      --accent-dim:   rgba(76,154,255,0.12);
+      --gold:         #f5c518;
+      --green:        #4caf50;
+      --yellow:       #ffb74d;
+      --orange:       #ff9800;
+      --red:          #f44336;
+      --teal:         #00bcd4;
+      --purple:       #ba68c8;
+      --radius-sm:    6px;
+      --radius-md:    10px;
+      --radius-lg:    16px;
+      --shadow:       0 4px 24px rgba(0,0,0,0.4);
+      --transition:   0.2s ease;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
+    a { color: var(--accent); text-decoration: none; }
+
+    /* ───── TOPNAV ───── */
+    #topnav {
+      background: var(--bg-card); border-bottom: 1px solid var(--border);
+      padding: 0 24px; display: flex; align-items: center; gap: 24px;
+      position: sticky; top: 0; z-index: 100; height: 64px;
+    }
+    .topnav-logo {
+      font-size: 20px; font-weight: 800; color: var(--accent);
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+    }
+    .topnav-logo span { color: var(--text-primary); }
+    
+    .nav-links { display: flex; align-items: center; height: 100%; gap: 12px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 8px; height: 100%;
+      padding: 0 12px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-muted);
+      transition: var(--transition); border-bottom: 2px solid transparent;
+    }
+    .nav-item:hover { color: var(--text-primary); }
+    .nav-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+    
+    .search-wrap { position: relative; margin-left: auto; display: flex; align-items: center; }
+    .search-wrap input {
+      background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
+      padding: 9px 14px 9px 38px; border-radius: 20px; font-size: 13px; width: 300px;
+      outline: none; transition: var(--transition); font-family: inherit;
+    }
+    .search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); width: 340px; }
+    .search-wrap .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 14px; }
+
+    /* ───── MAIN ───── */
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #content { flex: 1; padding: 32px 48px; max-width: 1400px; margin: 0 auto; width: 100%; overflow-y: auto; }
+    
+    .chart-container { position: relative; height: 300px; width: 100%; margin-top: 16px; }
+    .turtle-section-title { font-size: 20px; font-weight: 700; color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px; margin: 32px 0 24px; line-height: 1; }
+    .macro-banner { background: var(--bg-input); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 14px; margin-bottom: 24px; color: var(--text-muted); }
+    .macro-banner strong { color: var(--text-primary); }
+
+    /* ───── VIEWS ───── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ───── CARDS ───── */
+    .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 18px 20px; transition: var(--transition);
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+    .card-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+    .card-value { font-size: 22px; font-weight: 700; line-height: 1.1; }
+    .card-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .card.accent { border-color: var(--accent); background: linear-gradient(135deg, rgba(0,212,255,0.08), var(--bg-card)); }
+
+    /* ───── TABLE ───── */
+    .table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+    .table-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .table-header h2 { font-size: 14px; font-weight: 600; flex: 1; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+    thead th:hover { color: var(--text-primary); }
+    tbody tr { border-bottom: 1px solid rgba(42,50,68,0.5); transition: var(--transition); cursor: pointer; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-hover); }
+    tbody td { padding: 11px 14px; vertical-align: middle; }
+
+    /* ───── BADGE ───── */
+    .badge {
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+    }
+    .badge.STRONG_FA  { background: rgba(63,185,80,0.15);  color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }
+    .badge.GOOD_FA    { background: rgba(0,212,255,0.12);  color: #00d4ff; border: 1px solid rgba(0,212,255,0.3); }
+    .badge.AVERAGE_FA { background: rgba(210,153,34,0.15); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
+    .badge.WEAK_FA    { background: rgba(240,136,62,0.15); color: #f0883e; border: 1px solid rgba(240,136,62,0.3); }
+    .badge.POOR_FA    { background: rgba(248,81,73,0.15);  color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+
+    /* ───── SCORE GAUGE ───── */
+    .score-ring-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .score-ring svg { overflow: visible; }
+    .score-ring-label { font-size: 12px; color: var(--text-muted); }
+
+    /* ───── TICKER DETAIL ───── */
+    .detail-header { display: flex; align-items: flex-start; gap: 24px; margin-bottom: 24px; flex-wrap: wrap; }
+    .detail-ticker-info { flex: 1; }
+    .detail-ticker-symbol { font-size: 32px; font-weight: 800; color: var(--accent); }
+    .detail-company-name { font-size: 16px; font-weight: 500; margin-top: 4px; }
+    .detail-meta { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .meta-chip {
+      background: var(--bg-input); border: 1px solid var(--border);
+      padding: 3px 10px; border-radius: 20px; font-size: 12px; color: var(--text-muted);
+    }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; margin-top: 24px; }
+    .highlights-list, .warnings-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .highlights-list li::before { content: "✓ "; color: var(--green); font-weight: 700; }
+    .warnings-list li::before  { content: "⚠ "; color: var(--yellow); }
+    .highlights-list li, .warnings-list li { font-size: 13px; padding: 8px 12px; background: var(--bg-input); border-radius: var(--radius-sm); border-left: 3px solid; }
+    .highlights-list li { border-color: var(--green); }
+    .warnings-list li  { border-color: var(--yellow); }
+
+    /* ───── SCORE BREAKDOWN ───── */
+    .score-bars { display: flex; flex-direction: column; gap: 12px; }
+    .score-bar-item { display: flex; align-items: center; gap: 12px; }
+    .score-bar-label { font-size: 12px; color: var(--text-muted); width: 130px; flex-shrink: 0; }
+    .score-bar-track { flex: 1; height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+    .score-bar-val { font-size: 12px; font-weight: 600; width: 36px; text-align: right; }
+
+    /* ───── FILTERS ───── */
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .filter-select {
+      background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
+      padding: 7px 12px; border-radius: var(--radius-sm); font-size: 13px; outline: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .filter-select:focus { border-color: var(--accent); }
+    .btn {
+      padding: 7px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer; transition: var(--transition); font-family: inherit;
+    }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-primary:hover { background: #33ddff; transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* ───── UPLOAD ───── */
+    .upload-area {
+      border: 2px dashed var(--border); border-radius: var(--radius-lg);
+      padding: 48px 32px; text-align: center; cursor: pointer;
+      transition: var(--transition); background: var(--bg-card);
+    }
+    .upload-area:hover, .upload-area.dragover { border-color: var(--accent); background: var(--accent-dim); }
+    .upload-icon { font-size: 48px; margin-bottom: 16px; }
+    .upload-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .upload-sub { font-size: 13px; color: var(--text-muted); }
+    input[type="file"] { display: none; }
+
+    /* ───── NUMBER COLORS ───── */
+    .num-up   { color: var(--green); }
+    .num-down { color: var(--red); }
+    .num-neu  { color: var(--text-muted); }
+
+    /* ───── LOADING ───── */
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-row td { text-align: center; padding: 40px; color: var(--text-muted); }
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-text { font-size: 14px; }
+
+    /* ───── BENCHMARK TABLE ───── */
+    .bm-table thead th { background: var(--bg-card); }
+    .bm-val { font-size: 13px; font-weight: 500; }
+    .bm-null { color: var(--text-muted); font-size: 12px; }
+
+    /* ───── TOAST ───── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 14px 20px; font-size: 13px; max-width: 320px;
+      transform: translateY(80px); opacity: 0; transition: 0.3s ease;
+      box-shadow: var(--shadow);
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.success { border-left: 3px solid var(--green); }
+    #toast.error   { border-left: 3px solid var(--red); }
+    #toast.info    { border-left: 3px solid var(--accent); }
+
+    /* ───── SCROLLBAR ───── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-primary); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* ───── MISC ───── */
+    .ticker-link { color: var(--accent); font-weight: 700; font-size: 14px; }
+    .pill-exchange { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+    .HOSE { background: rgba(63,185,80,0.15); color: var(--green); }
+    .HNX  { background: rgba(167,139,250,0.15); color: var(--purple); }
+    .UPCOM{ background: rgba(240,136,62,0.15); color: var(--orange); }
+
+    .score-circle-number { font-size: 28px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+    .score-circle-label  { font-size: 11px; text-anchor: middle; dominant-baseline: central; }
+  </style>
+</head>
+<body>
+
+<!-- TOPNAV -->
+<nav id="topnav">
+  <div class="topnav-logo" onclick="showView('screener')">
+    <span class="logo-icon">🐢</span>
+    <span>FA <b>Engine</b></span>
+  </div>
+  
+  <div class="nav-links">
+    <div class="nav-item active" id="nav-screener" onclick="showView('screener')">Screener</div>
+    <div class="nav-item" id="nav-ticker" onclick="showView('ticker')" style="display:none">Detail</div>
+    <div class="nav-item" id="nav-benchmark" onclick="showView('benchmark')">Industry</div>
+    <div class="nav-item" id="nav-import" onclick="showView('import')">Import</div>
+  </div>
+  
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input id="topSearch" type="text" placeholder="Tìm kiếm mã (FPT, ETH, AAVE...)" onkeydown="if(event.key==='Enter')lookupTicker(this.value)" />
+  </div>
+  <div style="font-size:13px; color:var(--text-muted); margin-left:16px;">
+    Batch: <span id="sidebar-batch-info">...</span>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+  <div id="content">
+
+    <!-- ═══ SCREENER VIEW ═══ -->
+    <div class="view active" id="view-screener">
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>🔎 Screener — Cổ phiếu Việt Nam</h2>
+          <div class="filters">
+            <select class="filter-select" id="f-exchange" onchange="filterScreener()">
+              <option value="">Tất cả sàn</option>
+              <option value="HOSE" selected>HOSE</option>
+              <option value="HNX">HNX</option>
+              <option value="UPCOM">UPCOM</option>
+            </select>
+            <select class="filter-select" id="f-rating" onchange="filterScreener()">
+              <option value="">Tất cả rating</option>
+              <option value="STRONG_FA">STRONG_FA</option>
+              <option value="GOOD_FA">GOOD_FA</option>
+              <option value="AVERAGE_FA">AVERAGE_FA</option>
+              <option value="WEAK_FA">WEAK_FA</option>
+              <option value="POOR_FA">POOR_FA</option>
+            </select>
+            <select class="filter-select" id="f-minScore" onchange="filterScreener()">
+              <option value="0">FA Score ≥ 0</option>
+              <option value="50">FA Score ≥ 50</option>
+              <option value="60">FA Score ≥ 60</option>
+              <option value="70">FA Score ≥ 70</option>
+              <option value="80">FA Score ≥ 80</option>
+              <option value="90">FA Score ≥ 90</option>
+              <option value="95">FA Score ≥ 95</option>
+            </select>
+            <select class="filter-select" id="f-pageSize" onchange="filterScreener()">
+              <option value="20" selected>20 rows</option>
+              <option value="50">50 rows</option>
+              <option value="100">100 rows</option>
+              <option value="200">200 rows</option>
+            </select>
+            <button class="btn btn-ghost" onclick="filterScreener()">🔄 Refresh</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="screener-table">
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Tên công ty</th>
+                <th>Ngành</th>
+                <th>Sàn</th>
+                <th onclick="sortScreener('faScore')" title="FA Score">FA Score ↕</th>
+                <th>Rating</th>
+                <th onclick="sortScreener('growthScore')" title="Tăng trưởng">Growth ↕</th>
+                <th onclick="sortScreener('profitabilityScore')">Profit ↕</th>
+                <th onclick="sortScreener('valuationScore')">Value ↕</th>
+              </tr>
+            </thead>
+            <tbody id="screener-body">
+              <tr class="loading-row"><td colspan="9"><span class="spinner"></span> Đang tải...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; font-size:13px; color:var(--text-muted)">
+          <div id="screener-meta"></div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost" onclick="prevScreenerPage()">❮ Trước</button>
+            <div id="screener-page-indicator" style="padding: 6px 12px; background: var(--bg-hover); border-radius: 4px; font-weight: 600;">Trang 1</div>
+            <button class="btn btn-ghost" onclick="nextScreenerPage()">Sau ❯</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TICKER DETAIL VIEW ═══ -->
+    <div class="view" id="view-ticker">
+      <div id="ticker-detail-content">
+        <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Nhập mã cổ phiếu ở ô tra cứu phía trên</div></div>
+      </div>
+    </div>
+
+    <!-- ═══ BENCHMARK VIEW ═══ -->
+    <div class="view" id="view-benchmark">
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>📈 Industry Benchmark — Trung vị các chỉ số theo ngành</h2>
+          <button class="btn btn-ghost" onclick="loadBenchmark()">🔄 Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="bm-table">
+            <thead>
+              <tr>
+                <th>Ngành</th>
+                <th>Số CK</th>
+                <th>Median FA Score</th>
+                <th>Median P/E</th>
+                <th>Median P/B</th>
+                <th>Net Margin</th>
+                <th>Gross Margin</th>
+                <th>Revenue YoY</th>
+                <th>NPAT YoY</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-body">
+              <tr class="loading-row"><td colspan="9"><span class="spinner"></span> Đang tải...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ IMPORT VIEW ═══ -->
+    <div class="view" id="view-import">
+      <div style="max-width:600px;margin:0 auto;">
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-label">Import Excel</div>
+          <p style="font-size:13px;color:var(--text-muted);margin:8px 0 16px">Upload file .xlsx chứa dữ liệu tài chính. Hệ thống sẽ tự động parse, tính tỷ lệ và FA Score.</p>
+
+          <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
+            <div class="upload-icon">📂</div>
+            <div class="upload-title">Kéo thả hoặc click để chọn file</div>
+            <div class="upload-sub">.xlsx — tối đa 50MB</div>
+            <div id="selected-file-name" style="margin-top:12px;font-size:13px;color:var(--accent);font-weight:600"></div>
+          </div>
+          <input type="file" id="file-input" accept=".xlsx" onchange="handleFileSelect(event)" />
+
+          <div style="display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="report-period" placeholder="Report period (e.g. 2026Q1)" class="filter-select" style="flex:1;min-width:150px" value="2026Q1" />
+            <button class="btn btn-ghost" id="btn-preview" onclick="previewImport()" disabled>👁 Preview</button>
+            <button class="btn btn-primary" id="btn-import" onclick="doImport()" disabled>⬆ Import</button>
+          </div>
+        </div>
+
+        <div id="import-result" style="display:none" class="card">
+          <div class="card-label">Kết quả Import</div>
+          <div id="import-result-body" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+
+        <div id="preview-result" style="display:none" class="card">
+          <div class="card-label">Preview Workbook</div>
+          <div id="preview-result-body" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /#content -->
+</div><!-- /#main -->
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://localhost:8088/internal/fa';
+let screenerData = [];
+let screenerSortKey = 'faScore';
+let screenerSortAsc = false;
+let screenerPage = 0;
+let screenerTotalPages = 1;
+let selectedFile = null;
+
+// ═══ NAVIGATION ═══
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.getElementById('nav-' + name)?.classList.add('active');
+  const titles = { screener: '⊞ Screener', ticker: '📋 Ticker Detail', benchmark: '📈 Industry Benchmark', import: '⬆ Import Excel' };
+  const titleEl = document.getElementById('topbar-title');
+  if (titleEl) titleEl.textContent = titles[name] || name;
+  if (name === 'benchmark' && document.getElementById('benchmark-body').children.length <= 1) loadBenchmark();
+}
+
+// ═══ SCREENER ═══
+function filterScreener() {
+  screenerPage = 0;
+  loadScreener();
+}
+function prevScreenerPage() {
+  if (screenerPage > 0) {
+    screenerPage--;
+    loadScreener();
+  }
+}
+function nextScreenerPage() {
+  if (screenerPage < screenerTotalPages - 1) {
+    screenerPage++;
+    loadScreener();
+  }
+}
+
+async function loadScreener() {
+  const exchange = document.getElementById('f-exchange').value;
+  const rating   = document.getElementById('f-rating').value;
+  const minScore = document.getElementById('f-minScore').value;
+  const pageSize = document.getElementById('f-pageSize').value;
+  const tbody = document.getElementById('screener-body');
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="9"><span class="spinner"></span> Đang tải...</td></tr>';
+
+  let url = `${API}/screener?pageSize=${pageSize}&page=${screenerPage}&minFaScore=${minScore}`;
+  if (exchange) url += `&exchange=${exchange}`;
+  if (rating)   url += `&rating=${rating}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    screenerData = data.items || [];
+    screenerTotalPages = Math.ceil((data.totalCount || 0) / parseInt(pageSize)) || 1;
+    renderScreener();
+    
+    document.getElementById('screener-meta').textContent = `Tổng: ${data.totalCount} mã — Hiển thị: ${screenerData.length}`;
+    document.getElementById('screener-page-indicator').textContent = `Trang ${screenerPage + 1} / ${screenerTotalPages}`;
+  } catch(e) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="9" style="color:var(--red)">❌ Lỗi tải dữ liệu: ${e.message}</td></tr>`;
+  }
+}
+
+function renderScreener() {
+  const data = [...screenerData].sort((a,b) => {
+    const va = a[screenerSortKey] ?? -1;
+    const vb = b[screenerSortKey] ?? -1;
+    return screenerSortAsc ? va - vb : vb - va;
+  });
+  const tbody = document.getElementById('screener-body');
+  if (!data.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="9">Không có dữ liệu</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(item => `
+    <tr onclick="lookupTicker('${item.ticker}')">
+      <td><span class="ticker-link">${item.ticker}</span></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.companyName || '—'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);font-size:12px">${item.industry || '—'}</td>
+      <td><span class="pill-exchange ${item.exchange}">${item.exchange || '—'}</span></td>
+      <td>${scoreCell(item.overallScore)}</td>
+      <td><span class="badge ${item.rating}">${formatRating(item.rating)}</span></td>
+      <td>${scoreNum(item.growthScore)}</td>
+      <td>${scoreNum(item.profitabilityScore)}</td>
+      <td>${scoreNum(item.valuationScore)}</td>
+    </tr>`).join('');
+}
+
+function sortScreener(key) {
+  if (screenerSortKey === key) screenerSortAsc = !screenerSortAsc;
+  else { screenerSortKey = key; screenerSortAsc = false; }
+  renderScreener();
+}
+
+function scoreCell(v) {
+  if (v == null) return '<span class="num-neu">—</span>';
+  const n = parseFloat(v);
+  const color = n >= 80 ? '#3fb950' : n >= 65 ? '#00d4ff' : n >= 50 ? '#d29922' : n >= 35 ? '#f0883e' : '#f85149';
+  return `<span style="font-weight:700;color:${color}">${n.toFixed(0)}</span>`;
+}
+
+function scoreNum(v) {
+  if (v == null) return '<span class="num-neu">—</span>';
+  return `<span style="font-size:12px;color:var(--text-muted)">${parseFloat(v).toFixed(1)}</span>`;
+}
+
+function formatRating(r) {
+  const m = { STRONG_FA:'STRONG', GOOD_FA:'GOOD', AVERAGE_FA:'AVG', WEAK_FA:'WEAK', POOR_FA:'POOR' };
+  return m[r] || r;
+}
+
+
+
+// ═══ TICKER DETAIL ═══
+let charts = {
+  financial: null,
+  margin: null,
+  valuation: null,
+  fa: null
+};
+async function lookupTicker(ticker) {
+  if (!ticker) return;
+  ticker = ticker.trim().toUpperCase();
+  
+  document.getElementById('nav-ticker').style.display = 'flex';
+  showView('ticker');
+  
+  const container = document.getElementById('ticker-detail-content');
+  container.innerHTML = '<div class="empty-state"><span class="spinner"></span><div class="empty-text" style="margin-top:16px">Đang tải ' + ticker + '...</div></div>';
+  document.getElementById('topSearch').value = ticker;
+
+  try {
+    const [overview, ratios, history, financials, pitFinancials] = await Promise.all([
+      fetch(`${API}/tickers/${ticker}/overview`).then(r => r.json()),
+      fetch(`${API}/tickers/${ticker}/ratios`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/tickers/${ticker}/score-history`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/tickers/${ticker}/financials`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/tickers/${ticker}/financials?periodType=POINT_IN_TIME`).then(r => r.json()).catch(() => null)
+    ]);
+    
+    if (financials && pitFinancials && pitFinancials.series) {
+      financials.series = financials.series.concat(pitFinancials.series);
+    }
+    
+    renderTickerDetail(overview, ratios, history, financials);
+  } catch(e) {
+    console.error(e);
+    container.innerHTML = `<div class="empty-state" style="color:var(--red)">❌ Không tìm thấy mã <strong>${ticker}</strong></div>`;
+  }
+}
+
+function renderTickerDetail(ov, ratios, history, financials) {
+  const score = parseFloat(ov.faScore ?? 0);
+  const strokeColor = score >= 80 ? '#4caf50' : score >= 65 ? '#00bcd4' : score >= 50 ? '#ffb74d' : score >= 35 ? '#ff9800' : '#f44336';
+
+  const ratiosList = (ratios?.ratios || []).map(r => `
+    <tr>
+      <td style="color:var(--text-muted);font-size:12px">${r.ratioCode}</td>
+      <td style="font-weight:600;font-size:13px">${fmtRatioVal(r.ratioCode, r.value)}</td>
+      <td><span class="badge ${r.quality === 'OK' ? 'STRONG_FA' : 'WEAK_FA'}" style="font-size:10px">${r.quality}</span></td>
+    </tr>`).join('');
+
+  document.getElementById('ticker-detail-content').innerHTML = `
+    <!-- Huge Header -->
+    <div style="display:flex; align-items:center; gap: 16px; margin-bottom: 8px;">
+      <h1 style="font-size:42px; font-weight:800; color:var(--accent); line-height:1">${ov.ticker}</h1>
+      <span style="font-size:24px; color:var(--text-muted)">★</span>
+      <h2 style="font-size:18px; font-weight:400; color:var(--text-primary)">— ${ov.companyName || ''}</h2>
+    </div>
+    <div style="font-size:13px; color:var(--text-muted); margin-bottom:24px;">
+      ${ov.exchange} • ${ov.industry || 'Chưa xác định'} <a href="#" style="margin-left:12px; font-weight:600; color:var(--teal)">📈 Xem tín hiệu kỹ thuật →</a>
+    </div>
+
+    <!-- Macro Banner -->
+    <div class="macro-banner">
+      🇻🇳 Bối cảnh vĩ mô Việt Nam: <strong>Trung lập</strong> · Độ tự tin <strong>54%</strong> · cập nhật <strong>30/06/2026</strong>
+    </div>
+
+    <!-- Metric Cards -->
+    <div class="cards-row" style="margin-bottom:32px;">
+      ${metricCard('GIÁ (VND)', fmtPrice(ov.price), '')}
+      ${metricCard('P/E (TTM)', fmtN(ov.peTtm, 2), 'lần')}
+      ${metricCard('P/B', fmtN(ov.pb, 2), 'lần')}
+      ${metricCard('VỐN HÓA (TỶ)', fmtBillions(ov.marketCap), 'tỷ')}
+    </div>
+
+    <!-- Core Analysis -->
+    <div class="turtle-section-title">Phân tích cơ bản 15 năm</div>
+    <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+      Ngành: <strong>${ov.industry || 'Phi tài chính'}</strong> · Biên gộp · Tăng trưởng · P/E · P/B
+    </div>
+
+    <!-- Charts -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 32px;">
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">1. Doanh thu & Lợi nhuận (Tỷ VND)</h3>
+        <div class="chart-container"><canvas id="financialChart"></canvas></div>
+      </div>
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">2. Biên lợi nhuận (%)</h3>
+        <div class="chart-container"><canvas id="marginChart"></canvas></div>
+      </div>
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">3. Định giá (Giá & P/B)</h3>
+        <div class="chart-container"><canvas id="valuationChart"></canvas></div>
+      </div>
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">4. Lịch sử FA Score</h3>
+        <div class="chart-container"><canvas id="faScoreChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 24px; margin-bottom: 32px;">
+      <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">Phân rã FA Score (${score.toFixed(1)})</h3>
+      <div class="score-bars" style="margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+        ${scorebar('Tăng trưởng', ov.growthScore, '#4caf50', 'Tối đa 30đ. Dựa trên tăng trưởng Doanh thu & Lợi nhuận YoY')}
+        ${scorebar('Lợi nhuận',  ov.profitabilityScore, '#00bcd4', 'Tối đa 25đ. Dựa trên Biên lợi nhuận Gộp & Ròng')}
+        ${scorebar('Định giá',   ov.valuationScore, '#ba68c8', 'Tối đa 25đ. Dựa trên chỉ số P/E và P/B')}
+        ${scorebar('Ổn định',    ov.stabilityScore, '#f5c518', 'Tối đa 10đ. Đánh giá chuỗi lợi nhuận dương liên tục')}
+        ${scorebar('Chất lượng', ov.dataQualityScore, '#ff9800', 'Tối đa 10đ. Đánh giá độ tin cậy và đầy đủ của dữ liệu')}
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <div>
+        ${(ov.highlights?.length) ? `<h3 style="font-size:14px; font-weight:600; margin-bottom: 12px; color:var(--green)">✅ Điểm mạnh</h3><ul class="highlights-list">${ov.highlights.map(h=>`<li>${h}</li>`).join('')}</ul>` : ''}
+      </div>
+      <div>
+        ${(ov.warnings?.length) ? `<h3 style="font-size:14px; font-weight:600; margin-bottom: 12px; color:var(--yellow)">⚠️ Lưu ý</h3><ul class="warnings-list">${ov.warnings.map(w=>`<li>${w}</li>`).join('')}</ul>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Draw Charts
+  Chart.defaults.color = '#8893a0';
+  Chart.defaults.font.family = 'Inter';
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 12 } } },
+    scales: {
+      x: { grid: { display: false, drawBorder: false } },
+      y: { grid: { color: '#1e2532' }, border: { dash: [4, 4] } }
+    }
+  };
+
+  Object.values(charts).forEach(c => { if (c) c.destroy(); });
+
+  if (financials && financials.series && financials.series.length > 0) {
+    const sRev = financials.series.find(s => s.metricCode === 'REVENUE');
+    const sNpat = financials.series.find(s => s.metricCode === 'NPAT');
+    const sGross = financials.series.find(s => s.metricCode === 'GROSS_PROFIT');
+    const sPrice = financials.series.find(s => s.metricCode === 'CLOSE_PRICE');
+    const sPb = financials.series.find(s => s.metricCode === 'PB');
+    
+    let revs = sRev ? [...sRev.values] : [];
+    revs.sort((a, b) => a.period.localeCompare(b.period));
+    const labels = revs.map(r => r.period);
+    
+    // Map values by period
+    const mapVal = (series) => {
+      const m = {};
+      if (series) series.values.forEach(v => m[v.period] = parseFloat(v.value));
+      return labels.map(l => m[l] || null);
+    };
+
+    const revData = mapVal(sRev).map(v => v ? v / 1e9 : null);
+    const npatData = mapVal(sNpat).map(v => v ? v / 1e9 : null);
+    const grossData = mapVal(sGross);
+    
+    // Margins
+    const grossMargin = revData.map((v, i) => (v && grossData[i]) ? (grossData[i] / (v * 1e9)) * 100 : null);
+    const netMargin = revData.map((v, i) => (v && npatData[i]) ? (npatData[i] / v) * 100 : null);
+
+    // Valuation
+    const priceData = mapVal(sPrice);
+    const pbData = mapVal(sPb);
+
+    // 1. Financial Chart (Bar)
+    charts.financial = new Chart(document.getElementById('financialChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Doanh thu (Tỷ)', data: revData, backgroundColor: '#4c9aff', borderRadius: 4 },
+          { label: 'Lợi nhuận (Tỷ)', data: npatData, backgroundColor: '#4caf50', borderRadius: 4 }
+        ]
+      },
+      options: commonOptions
+    });
+
+    // 2. Margin Chart (Line)
+    charts.margin = new Chart(document.getElementById('marginChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Biên LN Gộp (%)', data: grossMargin, borderColor: '#ff9800', backgroundColor: '#ff9800', tension: 0.3 },
+          { label: 'Biên LN Ròng (%)', data: netMargin, borderColor: '#00bcd4', backgroundColor: '#00bcd4', tension: 0.3 }
+        ]
+      },
+      options: commonOptions
+    });
+
+    // 3. Valuation Chart (Mixed)
+    charts.valuation = new Chart(document.getElementById('valuationChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { type: 'line', label: 'Giá (VND)', data: priceData, borderColor: '#ba68c8', backgroundColor: '#ba68c8', tension: 0.2, yAxisID: 'y1' },
+          { type: 'bar', label: 'P/B', data: pbData, backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 2, yAxisID: 'y' }
+        ]
+      },
+      options: {
+        ...commonOptions,
+        scales: {
+          x: { grid: { display: false } },
+          y: { type: 'linear', display: true, position: 'left', grid: { color: '#1e2532' } },
+          y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+  }
+
+  // 4. FA Score History (Line Area)
+  if (history && history.history) {
+    let hist = [...history.history].sort((a, b) => a.period.localeCompare(b.period));
+    charts.fa = new Chart(document.getElementById('faScoreChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: hist.map(h => h.period),
+        datasets: [{
+          label: 'FA Score',
+          data: hist.map(h => h.overallScore),
+          borderColor: '#4caf50',
+          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        ...commonOptions,
+        scales: {
+          ...commonOptions.scales,
+          y: { min: 0, max: 100, grid: { color: '#1e2532' } }
+        }
+      }
+    });
+  }
+}
+
+function buildScoreRing(score, color) {
+  const r = 54, cx = 68, cy = 68, stroke = 10;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
+  return `<svg width="136" height="136" viewBox="0 0 136 136">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${stroke}" />
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+      stroke-dasharray="${dash} ${circ}" stroke-dashoffset="${circ/4}" stroke-linecap="round"
+      transform="rotate(-90 ${cx} ${cy})" />
+    <text x="${cx}" y="${cy - 10}" fill="${color}" class="score-circle-number">${score.toFixed(0)}</text>
+    <text x="${cx}" y="${cy + 14}" fill="var(--text-muted)" class="score-circle-label">/ 100</text>
+  </svg>`;
+}
+
+function metricCard(label, value, sub) {
+  return `<div class="card"><div class="card-label">${label}</div><div class="card-value">${value}</div><div class="card-sub">${sub}</div></div>`;
+}
+
+function scorebar(label, val, color, tooltip) {
+  const v = parseFloat(val ?? 0);
+  const infoIcon = tooltip ? ` <span title="${tooltip}" style="cursor:help;color:var(--text-muted);font-size:12px;margin-left:4px">ⓘ</span>` : '';
+  return `<div class="score-bar-item">
+    <div class="score-bar-label">${label}${infoIcon}</div>
+    <div class="score-bar-track"><div class="score-bar-fill" style="width:${v}%;background:${color}"></div></div>
+    <div class="score-bar-val" style="color:${color}">${v.toFixed(0)}</div>
+  </div>`;
+}
+
+function fmtN(v, d=2) { return v != null ? parseFloat(v).toFixed(d) : '—'; }
+function fmtPrice(v) {
+  if (!v) return '—';
+  return new Intl.NumberFormat('vi-VN').format(Math.round(parseFloat(v)));
+}
+function fmtBillions(v) {
+  if (!v) return '—';
+  return (parseFloat(v) / 1e9).toLocaleString('vi-VN', {maximumFractionDigits:0});
+}
+function fmtPct(v) {
+  if (v == null) return '—';
+  const n = parseFloat(v);
+  return (n > 0 ? '+' : '') + n.toFixed(1) + '%';
+}
+function fmtRatioVal(code, v) {
+  if (v == null) return '—';
+  if (code.endsWith('YOY') || code.endsWith('QOQ') || code.includes('MARGIN')) return fmtPct(v);
+  if (code === 'MARKET_CAP') return fmtBillions(v) + ' tỷ';
+  return parseFloat(v).toFixed(2);
+}
+
+// ═══ BENCHMARK ═══
+async function loadBenchmark() {
+  const tbody = document.getElementById('benchmark-body');
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="9"><span class="spinner"></span> Đang tính toán...</td></tr>';
+  try {
+    const data = await fetch(`${API}/benchmarks/industry`).then(r => r.json());
+    const rows = (data.benchmarks || []).map(b => `
+      <tr>
+        <td style="font-weight:500">${b.industry}</td>
+        <td style="text-align:center">${b.tickerCount}</td>
+        <td>${scoreCell(b.medianFaScore)}</td>
+        <td class="bm-val">${b.medianPe != null ? parseFloat(b.medianPe).toFixed(1) : '<span class="bm-null">—</span>'}</td>
+        <td class="bm-val">${b.medianPb != null ? parseFloat(b.medianPb).toFixed(2) : '<span class="bm-null">—</span>'}</td>
+        <td class="bm-val">${b.medianNetMargin != null ? fmtPct(b.medianNetMargin) : '<span class="bm-null">—</span>'}</td>
+        <td class="bm-val">${b.medianGrossMargin != null ? fmtPct(b.medianGrossMargin) : '<span class="bm-null">—</span>'}</td>
+        <td class="bm-val ${growthColor(b.medianRevenueYoy)}">${b.medianRevenueYoy != null ? fmtPct(b.medianRevenueYoy) : '<span class="bm-null">—</span>'}</td>
+        <td class="bm-val ${growthColor(b.medianNpatYoy)}">${b.medianNpatYoy != null ? fmtPct(b.medianNpatYoy) : '<span class="bm-null">—</span>'}</td>
+      </tr>`).join('');
+    tbody.innerHTML = rows || '<tr class="loading-row"><td colspan="9">Không có dữ liệu</td></tr>';
+  } catch(e) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="9" style="color:var(--red)">❌ ${e.message}</td></tr>`;
+  }
+}
+
+function growthColor(v) {
+  if (v == null) return '';
+  return parseFloat(v) >= 0 ? 'num-up' : 'num-down';
+}
+
+// ═══ IMPORT ═══
+function handleFileSelect(evt) {
+  selectedFile = evt.target.files[0];
+  if (selectedFile) {
+    document.getElementById('selected-file-name').textContent = '📎 ' + selectedFile.name;
+    document.getElementById('btn-preview').disabled = false;
+    document.getElementById('btn-import').disabled = false;
+  }
+}
+
+function handleDrop(evt) {
+  evt.preventDefault();
+  document.getElementById('upload-area').classList.remove('dragover');
+  const file = evt.dataTransfer.files[0];
+  if (file && file.name.endsWith('.xlsx')) {
+    selectedFile = file;
+    document.getElementById('selected-file-name').textContent = '📎 ' + file.name;
+    document.getElementById('btn-preview').disabled = false;
+    document.getElementById('btn-import').disabled = false;
+  }
+}
+
+async function previewImport() {
+  if (!selectedFile) return;
+  const period = document.getElementById('report-period').value;
+  const form = new FormData();
+  form.append('file', selectedFile);
+  if (period) form.append('reportPeriod', period);
+
+  const el = document.getElementById('preview-result');
+  const body = document.getElementById('preview-result-body');
+  el.style.display = 'block';
+  body.innerHTML = '<span class="spinner"></span> Đang phân tích...';
+
+  try {
+    const res = await fetch(`${API}/import-batches/excel/preview`, { method: 'POST', body: form });
+    const data = await res.json();
+    body.innerHTML = `
+      <div style="margin-bottom:12px">
+        <b>File:</b> ${data.fileName}<br>
+        <b>SHA-256:</b> <code style="font-size:10px;color:var(--text-muted)">${data.checksum?.slice(0,16)}...</code><br>
+        <b>Tổng sheets:</b> ${data.totalSheets} &nbsp;|&nbsp;
+        <b>Safe to import:</b> <span style="color:${data.safe ? 'var(--green)' : 'var(--red)'}">${data.safe ? '✓ YES' : '✗ NO'}</span>
+      </div>
+      <div style="display:grid;gap:6px">
+        ${(data.sheets || []).map(s => `
+          <div style="display:flex;gap:10px;align-items:center;padding:6px 10px;border-radius:6px;background:var(--bg-input)">
+            <span style="color:${s.recognized ? 'var(--green)' : 'var(--text-muted)'};">${s.recognized ? '✓' : '○'}</span>
+            <span style="font-weight:600;font-size:12px;width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${s.sheetName}</span>
+            <span style="font-size:11px;color:var(--accent);width:100px">${s.recognized ? s.logicalSheet : 'SKIP'}</span>
+            <span style="font-size:11px;color:var(--text-muted)">${s.estimatedRows > 0 ? s.estimatedRows + ' rows' : ''}</span>
+          </div>`).join('')}
+      </div>
+      ${data.warnings?.length ? `<div style="margin-top:12px;color:var(--yellow)">⚠ ${data.warnings.join('<br>')}</div>` : ''}
+    `;
+  } catch(e) {
+    body.innerHTML = `<span style="color:var(--red)">❌ ${e.message}</span>`;
+  }
+}
+
+async function doImport() {
+  if (!selectedFile) return;
+  const period = document.getElementById('report-period').value;
+  const form = new FormData();
+  form.append('file', selectedFile);
+  if (period) form.append('reportPeriod', period);
+  form.append('importedBy', 'web-ui');
+
+  const el = document.getElementById('import-result');
+  const body = document.getElementById('import-result-body');
+  el.style.display = 'block';
+  body.innerHTML = '<span class="spinner"></span> Đang import... (có thể mất 30-60 giây)';
+  document.getElementById('btn-import').disabled = true;
+
+  try {
+    const res = await fetch(`${API}/import-batches/excel`, { method: 'POST', body: form });
+    const data = await res.json();
+    const isOk = data.status === 'SUCCESS' || data.status === 'PARTIAL_SUCCESS';
+    body.innerHTML = `
+      <div style="color:${isOk ? 'var(--green)' : 'var(--red)'}; font-weight:700; font-size:15px; margin-bottom:12px">
+        ${isOk ? '✅ Import thành công!' : '❌ Import thất bại'}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        <div>Status: <b>${data.status}</b></div>
+        <div>Batch ID: <b>#${data.batchId}</b></div>
+        <div>Tổng rows: <b>${data.totalRows ?? '—'}</b></div>
+        <div>Thành công: <b style="color:var(--green)">${data.successRows ?? '—'}</b></div>
+        <div>Warning: <b style="color:var(--yellow)">${data.warningRows ?? '—'}</b></div>
+        <div>Lỗi: <b style="color:var(--red)">${data.errorRows ?? '—'}</b></div>
+      </div>
+    `;
+    if (isOk) showToast('Import thành công! Screener đã được cập nhật.', 'success');
+  } catch(e) {
+    body.innerHTML = `<span style="color:var(--red)">❌ ${e.message}</span>`;
+    showToast('Import thất bại: ' + e.message, 'error');
+  } finally {
+    document.getElementById('btn-import').disabled = false;
+  }
+}
+
+// ═══ TOAST ═══
+let toastTimer;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); }, 4000);
+}
+
+// ═══ SIDEBAR BATCH INFO ═══
+async function loadBatchInfo() {
+  try {
+    const res = await fetch(`${API}/import-batches/latest`).catch(() => null);
+    if (res?.ok) {
+      const d = await res.json();
+      document.getElementById('sidebar-batch-info').textContent = `Batch #${d.batchId} · ${d.status}`;
+    } else {
+      document.getElementById('sidebar-batch-info').textContent = 'API: localhost:8088';
+    }
+  } catch { document.getElementById('sidebar-batch-info').textContent = 'API: localhost:8088'; }
+}
+
+// ═══ INIT ═══
+loadScreener();
+loadBatchInfo();
+</script>
+</body>
+</html>

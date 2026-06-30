@@ -1,0 +1,30 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fa-postgres
+    environment:
+      POSTGRES_DB: fundamental_engine
+      POSTGRES_USER: fa_user
+      POSTGRES_PASSWORD: fa_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - fa-data:/var/lib/postgresql/data
+
+  app:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: fundamental-engine
+    working_dir: /app
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./target/fundamental-engine-0.1.0-SNAPSHOT.jar:/app/app.jar
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    command: ["java", "-jar", "app.jar"]
+    depends_on:
+      - postgres
+
+volumes:
+  fa-data:

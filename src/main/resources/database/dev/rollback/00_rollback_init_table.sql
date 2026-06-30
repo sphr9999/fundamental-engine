@@ -1,0 +1,3 @@
+DROP TABLE "public"."test";
+
+DROP SEQUENCE ACCOUNT_ACCT_ID_SEQ;
