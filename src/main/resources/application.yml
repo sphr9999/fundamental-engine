@@ -1,18 +1,16 @@
 # ============================================================
-# DEFAULT
+# DEFAULT (dùng cho Render.com deploy)
+# ============================================================
 server:
-  port: 8088
+  port: ${PORT:10000}
+  address: 0.0.0.0
   forward-headers-strategy: framework
   error:
     include-message: always
-  servlet:
-    session:
-      cookie:
-        secure: true
 
 management:
   server:
-    port: 8088
+    port: ${PORT:10000}
   endpoints:
     web:
       exposure:
@@ -29,35 +27,25 @@ logging:
   pattern:
     console: "%clr(%d{${LOG_DATEFORMAT_PATTERN:yyyy-MM-dd'T'HH:mm:ss}}){faint} %clr(${LOG_LEVEL_PATTERN:%5p}) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:%wEx{${LOG_STACKTRACE_LIMIT:1}}}"
   level:
-    org:
-      hibernate:
-        sql: debug
+    org.hibernate.sql: WARN
+    com.eyelanding: INFO
 
 spring:
   application:
     name: fundamental-engine
-  profiles:
-    default: local
-    active: local
 
   jpa:
     open-in-view: false
+    show-sql: false
     hibernate:
       ddl-auto: none
-
-  # ── Old local PostgreSQL (uncomment to use) ──
-  # datasource:
-  #   url: jdbc:postgresql://localhost:5432/fundamental-engine
-  #   username: admin
-  #   password: 123456
-  #   driver-class-name: org.postgresql.Driver
-  #   hikari:
-  #     maximum-pool-size: 200
-  #     minimum-idle: 5
+    properties:
+      hibernate:
+        format_sql: false
 
   # ── CockroachDB Cloud (Singapore) ──
   datasource:
-    url: jdbc:postgresql://hungry-dunnart-17395.jxf.gcp-asia-southeast1.cockroachlabs.cloud:26257/fundamental_engine
+    url: jdbc:postgresql://hungry-dunnart-17395.jxf.gcp-asia-southeast1.cockroachlabs.cloud:26257/fundamental_engine?sslmode=require
     username: sphr9999_gmail_com
     password: _jfkDKWVDZPUFi-5YcBung
     driver-class-name: org.postgresql.Driver
@@ -78,11 +66,6 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
 
-  management:
-    tracing:
-      sampling:
-        probability: 1.0
-
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -90,11 +73,6 @@ springdoc:
     path: /swagger-ui.html
     syntaxHighlight:
       theme: "monokai"
-
-log4j:
-  logger:
-    org:
-      hibernate: WARN
 
 # ── VCI API Enrichment Configuration ──
 fundamental-engine:
@@ -113,7 +91,8 @@ fundamental-engine:
 
 ---
 # ============================================================
-# LOCAL
+# LOCAL (dev trên máy — IntelliJ)
+# ============================================================
 spring:
   config:
     activate:
@@ -124,6 +103,19 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+server:
+  port: 8088
+  address: 127.0.0.1
+
+management:
+  server:
+    port: 8088
+
+logging:
+  level:
+    org.hibernate.sql: debug
+    com.eyelanding: DEBUG
 
 ---
 # ============================================================
@@ -140,22 +132,3 @@ spring:
   config:
     activate:
       on-profile: prod
-
----
-# ============================================================
-# RENDER (Render.com + CockroachDB)
-spring:
-  config:
-    activate:
-      on-profile: render
-
-  jpa:
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: false
-
-logging:
-  level:
-    org.hibernate.sql: WARN
-    com.eyelanding: INFO

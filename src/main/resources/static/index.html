@@ -398,7 +398,9 @@
 <div id="toast"></div>
 
 <script>
-const API = 'http://localhost:8088/internal/fa';
+const API = window.location.hostname === 'localhost'
+  ? 'http://localhost:8088/internal/fa'
+  : `${window.location.origin}/internal/fa`;
 let screenerData = [];
 let screenerSortKey = 'faScore';
 let screenerSortAsc = false;
@@ -1175,9 +1177,9 @@ async function loadBatchInfo() {
       const d = await res.json();
       document.getElementById('sidebar-batch-info').textContent = `Batch #${d.batchId} · ${d.status}`;
     } else {
-      document.getElementById('sidebar-batch-info').textContent = 'API: localhost:8088';
+      document.getElementById('sidebar-batch-info').textContent = `API: ${window.location.host}`;
     }
-  } catch { document.getElementById('sidebar-batch-info').textContent = 'API: localhost:8088'; }
+  } catch { document.getElementById('sidebar-batch-info').textContent = `API: ${window.location.host}`; }
 }
 
 // ═══ INIT ═══
