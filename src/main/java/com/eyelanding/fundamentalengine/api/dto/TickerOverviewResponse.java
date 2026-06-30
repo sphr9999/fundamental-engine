@@ -28,6 +28,15 @@ public class TickerOverviewResponse {
     private BigDecimal peTtm;
     private BigDecimal marketCap;
 
+    // Realtime market data from VCI
+    private BigDecimal targetPrice;
+    private String analystRating;
+    private BigDecimal highestPrice1Year;
+    private BigDecimal lowestPrice1Year;
+
+    /** "VCI_REALTIME" or "EXCEL_IMPORT" — indicates source of price data */
+    private String priceSource;
+
     // FA Score
     private BigDecimal faScore;
     private String rating;

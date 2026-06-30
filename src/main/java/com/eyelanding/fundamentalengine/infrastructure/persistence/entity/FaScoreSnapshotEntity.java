@@ -47,6 +47,12 @@ public class FaScoreSnapshotEntity {
     @Column(name = "data_quality_score", precision = 10, scale = 2)
     private BigDecimal dataQualityScore;
 
+    @Column(name = "solvency_score", precision = 10, scale = 2)
+    private BigDecimal solvencyScore;
+
+    @Column(name = "cashflow_score", precision = 10, scale = 2)
+    private BigDecimal cashflowScore;
+
     @Column(name = "overall_score", precision = 10, scale = 2)
     private BigDecimal overallScore;
 

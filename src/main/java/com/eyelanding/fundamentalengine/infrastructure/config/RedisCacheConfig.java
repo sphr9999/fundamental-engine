@@ -1,30 +1,27 @@
 package com.eyelanding.fundamentalengine.infrastructure.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Redis cache configuration.
- * Cache names and TTLs:
- *   - ticker-overview:    5 minutes  (read-heavy, updated on each import)
- *   - ticker-ratios:      5 minutes
- *   - screener:          10 minutes  (heavier to compute)
- *   - industry-benchmark: 15 minutes (least volatile)
+ * Caffeine in-memory cache configuration.
+ *
+ * <p>Replaces Redis cache for single-instance deployments (e.g. Render free tier).
+ * Cache names and TTLs are kept consistent with the previous Redis configuration.</p>
+ *
+ * <p>Cache names:</p>
+ * <ul>
+ *   <li>{@code ticker-overview}:    5 minutes (read-heavy, updated on each import)</li>
+ *   <li>{@code ticker-ratios}:      5 minutes</li>
+ *   <li>{@code screener}:          10 minutes (heavier to compute)</li>
+ *   <li>{@code industry-benchmark}: 15 minutes (least volatile)</li>
+ * </ul>
  */
 @Configuration
 @EnableCaching
@@ -36,32 +33,20 @@ public class RedisCacheConfig {
     public static final String CACHE_INDUSTRY_BENCHMARK = "industry-benchmark";
 
     @Bean
-    public CacheManager cacheManager(RedisConnectionFactory factory) {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        mapper.activateDefaultTyping(
-                mapper.getPolymorphicTypeValidator(),
-                ObjectMapper.DefaultTyping.NON_FINAL);
+    public CacheManager cacheManager() {
+        CaffeineCacheManager manager = new CaffeineCacheManager(
+                CACHE_TICKER_OVERVIEW,
+                CACHE_TICKER_RATIOS,
+                CACHE_SCREENER,
+                CACHE_INDUSTRY_BENCHMARK
+        );
 
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
+        // Default: 5 min TTL, max 1000 entries
+        manager.setCaffeine(Caffeine.newBuilder()
+                .maximumSize(1000)
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .recordStats());
 
-        RedisCacheConfiguration defaults = RedisCacheConfiguration.defaultCacheConfig()
-                .serializeKeysWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(serializer))
-                .disableCachingNullValues();
-
-        Map<String, RedisCacheConfiguration> configs = new HashMap<>();
-        configs.put(CACHE_TICKER_OVERVIEW, defaults.entryTtl(Duration.ofMinutes(5)));
-        configs.put(CACHE_TICKER_RATIOS, defaults.entryTtl(Duration.ofMinutes(5)));
-        configs.put(CACHE_SCREENER, defaults.entryTtl(Duration.ofMinutes(10)));
-        configs.put(CACHE_INDUSTRY_BENCHMARK, defaults.entryTtl(Duration.ofMinutes(15)));
-
-        return RedisCacheManager.builder(factory)
-                .cacheDefaults(defaults.entryTtl(Duration.ofMinutes(5)))
-                .withInitialCacheConfigurations(configs)
-                .build();
+        return manager;
     }
 }

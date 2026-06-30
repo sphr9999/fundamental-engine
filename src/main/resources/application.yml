@@ -58,10 +58,8 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
     enabled: true
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
+
+  # Cache: using Caffeine in-memory (no Redis needed)
 
   servlet:
     multipart:
@@ -85,6 +83,21 @@ log4j:
   logger:
     org:
       hibernate: WARN
+
+# ── VCI API Enrichment Configuration ──
+fundamental-engine:
+  vci:
+    base-url: https://iq.vietcap.com.vn/api/iq-insight-service
+    referer: https://trading.vietcap.com.vn/
+    origin: https://trading.vietcap.com.vn
+    request-delay-ms: 200
+    max-retries: 3
+    retry-base-delay-ms: 1000
+    connect-timeout-ms: 5000
+    read-timeout-ms: 10000
+    circuit-breaker-failure-threshold: 10
+    circuit-breaker-reset-ms: 60000
+    batch-size: 50
 
 ---
 # ============================================================
@@ -115,3 +128,40 @@ spring:
   config:
     activate:
       on-profile: prod
+
+---
+# ============================================================
+# RENDER (Render.com + Supabase PostgreSQL)
+spring:
+  config:
+    activate:
+      on-profile: render
+
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
+      idle-timeout: 300000
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  port: ${PORT:8088}
+
+management:
+  server:
+    port: ${PORT:8088}
+
+logging:
+  level:
+    org.hibernate.sql: WARN
+    com.eyelanding: INFO

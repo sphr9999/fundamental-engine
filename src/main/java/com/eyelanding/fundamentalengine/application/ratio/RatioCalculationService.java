@@ -22,29 +22,39 @@ import java.util.stream.Collectors;
 /**
  * Calculates financial ratios for all tickers in a given import batch.
  *
- * Ratios calculated:
+ * Phase 1 ratios (v1.0):
  * - REVENUE_YOY, NPAT_YOY (year-over-year growth %)
  * - REVENUE_QOQ, NPAT_QOQ (quarter-over-quarter growth %)
  * - GROSS_MARGIN, NET_MARGIN (margin ratios)
  * - MARKET_CAP (price × shares)
  * - PE_TTM (price / EPS TTM)
  * - POSITIVE_NPAT_LAST_4Q (bool: all 4 recent quarters positive)
+ *
+ * Phase 2A ratios (v2.0):
+ * - ROE, ROA, OPERATING_MARGIN (profitability)
+ * - DEBT_TO_EQUITY, CURRENT_RATIO, QUICK_RATIO, INTEREST_COVERAGE (solvency)
+ * - ASSET_TURNOVER (efficiency)
+ * - FREE_CASH_FLOW, CFO_TO_NET_INCOME, CAPEX_TO_REVENUE (cash flow)
+ * - BOOK_VALUE_PER_SHARE (per share)
+ * - NET_DEBT (balance sheet derived)
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RatioCalculationService {
 
-    private static final String CALC_VERSION = "v1.0";
+    private static final String CALC_VERSION = "v2.0";
     private static final MathContext MC = new MathContext(10, RoundingMode.HALF_UP);
     private static final int SCALE = 8;
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    private static final BigDecimal DAYS_IN_QUARTER = BigDecimal.valueOf(90);
 
     private final FaFinancialMetricRepository metricRepo;
     private final FaFinancialRatioRepository ratioRepo;
 
     /**
      * Calculate all ratios for every ticker in the batch.
-     * Should be called after Excel import completes.
+     * Should be called after Excel import or VCI API enrichment completes.
      */
     @Transactional
     public void calculateForBatch(Long batchId, String reportPeriod) {
@@ -81,6 +91,10 @@ public class RatioCalculationService {
         for (var m : metrics) {
             idx.put(m.getMetricCode().name() + "|" + m.getPeriodCode(), m);
         }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Phase 1 ratios
+        // ═══════════════════════════════════════════════════════════════
 
         // ── Revenue YoY ──────────────────────────────────────────────
         String prevYearPeriod = getPreviousYearPeriod(reportPeriod);
@@ -137,11 +151,85 @@ public class RatioCalculationService {
                 calcPositiveNpatLast4Q(idx, reportPeriod))
                 .ifPresent(result::add);
 
+        // ═══════════════════════════════════════════════════════════════
+        // Phase 2A ratios (only calculated if enriched data is available)
+        // ═══════════════════════════════════════════════════════════════
+
+        // ── ROE = NPAT / Total Equity × 100 ──────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.ROE, batchId,
+                calcRatio(idx, MetricCode.NPAT, MetricCode.TOTAL_EQUITY, reportPeriod, true))
+                .ifPresent(result::add);
+
+        // ── ROA = NPAT / Total Assets × 100 ──────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.ROA, batchId,
+                calcRatio(idx, MetricCode.NPAT, MetricCode.TOTAL_ASSETS, reportPeriod, true))
+                .ifPresent(result::add);
+
+        // ── Operating Margin = Operating Profit / Revenue × 100 ──────
+        ratio(ticker, reportPeriod, RatioCode.OPERATING_MARGIN, batchId,
+                calcMargin(idx, MetricCode.OPERATING_PROFIT, MetricCode.REVENUE, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── EBITDA Margin ────────────────────────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.EBITDA_MARGIN, batchId,
+                calcEbitdaMargin(idx, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── Debt to Equity ───────────────────────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.DEBT_TO_EQUITY, batchId,
+                calcDebtToEquity(idx, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── Net Debt = (ST Debt + LT Debt) - Cash ────────────────────
+        ratio(ticker, reportPeriod, RatioCode.NET_DEBT, batchId,
+                calcNetDebt(idx, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── Current Ratio = Current Assets / Current Liabilities ─────
+        ratio(ticker, reportPeriod, RatioCode.CURRENT_RATIO, batchId,
+                calcRatio(idx, MetricCode.CURRENT_ASSETS, MetricCode.CURRENT_LIABILITIES, reportPeriod, false))
+                .ifPresent(result::add);
+
+        // ── Quick Ratio = (Current Assets - Inventory) / Current Liabilities
+        ratio(ticker, reportPeriod, RatioCode.QUICK_RATIO, batchId,
+                calcQuickRatio(idx, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── Interest Coverage = Operating Profit / Interest Expenses ─
+        ratio(ticker, reportPeriod, RatioCode.INTEREST_COVERAGE, batchId,
+                calcRatio(idx, MetricCode.OPERATING_PROFIT, MetricCode.INTEREST_EXPENSES, reportPeriod, false))
+                .ifPresent(result::add);
+
+        // ── Asset Turnover = Revenue / Total Assets ──────────────────
+        ratio(ticker, reportPeriod, RatioCode.ASSET_TURNOVER, batchId,
+                calcRatio(idx, MetricCode.REVENUE, MetricCode.TOTAL_ASSETS, reportPeriod, false))
+                .ifPresent(result::add);
+
+        // ── Free Cash Flow = CFO - |CAPEX| ───────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.FREE_CASH_FLOW, batchId,
+                calcFreeCashFlow(idx, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── CFO / Net Income ─────────────────────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.CFO_TO_NET_INCOME, batchId,
+                calcRatio(idx, MetricCode.CFO, MetricCode.NPAT, reportPeriod, false))
+                .ifPresent(result::add);
+
+        // ── CAPEX / Revenue × 100 ────────────────────────────────────
+        ratio(ticker, reportPeriod, RatioCode.CAPEX_TO_REVENUE, batchId,
+                calcCapexToRevenue(idx, reportPeriod))
+                .ifPresent(result::add);
+
+        // ── Book Value Per Share = Total Equity / Shares Outstanding ─
+        ratio(ticker, reportPeriod, RatioCode.BOOK_VALUE_PER_SHARE, batchId,
+                calcRatio(idx, MetricCode.TOTAL_EQUITY, MetricCode.SHARES_OUTSTANDING, reportPeriod, false))
+                .ifPresent(result::add);
+
         return result;
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Calculation helpers
+    // Phase 1 calculation helpers (unchanged)
     // ═══════════════════════════════════════════════════════════════
 
     private RatioResult calcYoY(Map<String, FaFinancialMetricEntity> idx,
@@ -153,7 +241,7 @@ public class RatioCalculationService {
         if (previous == null) return RatioResult.missing("Previous year value missing");
         if (previous.compareTo(BigDecimal.ZERO) == 0) return RatioResult.missing("Division by zero: previous = 0");
         BigDecimal yoy = current.subtract(previous).divide(previous.abs(), SCALE, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
+                .multiply(HUNDRED);
         return RatioResult.ok(yoy);
     }
 
@@ -166,7 +254,7 @@ public class RatioCalculationService {
         if (previous == null) return RatioResult.missing("Previous quarter value missing");
         if (previous.compareTo(BigDecimal.ZERO) == 0) return RatioResult.missing("Division by zero: previous = 0");
         BigDecimal qoq = current.subtract(previous).divide(previous.abs(), SCALE, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
+                .multiply(HUNDRED);
         return RatioResult.ok(qoq);
     }
 
@@ -177,7 +265,7 @@ public class RatioCalculationService {
         if (num == null) return RatioResult.missing(numerator + " missing");
         if (den == null || den.compareTo(BigDecimal.ZERO) == 0) return RatioResult.missing("Revenue is zero or missing");
         BigDecimal margin = num.divide(den, SCALE, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
+                .multiply(HUNDRED);
         return RatioResult.ok(margin);
     }
 
@@ -208,6 +296,123 @@ public class RatioCalculationService {
         }
         // Return 1 if all 4 positive, 0 otherwise
         return RatioResult.ok(positiveCount == 4 ? BigDecimal.ONE : BigDecimal.ZERO);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 2A calculation helpers (new)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Generic ratio: numerator / denominator.
+     * If asPercentage is true, multiplies by 100.
+     */
+    private RatioResult calcRatio(Map<String, FaFinancialMetricEntity> idx,
+                                   MetricCode numerator, MetricCode denominator,
+                                   String period, boolean asPercentage) {
+        var num = getOkValue(idx, numerator, period);
+        var den = getOkValue(idx, denominator, period);
+        if (num == null) return RatioResult.missing(numerator + " missing");
+        if (den == null || den.compareTo(BigDecimal.ZERO) == 0) {
+            return RatioResult.missing(denominator + " is zero or missing");
+        }
+        BigDecimal result = num.divide(den, SCALE, RoundingMode.HALF_UP);
+        if (asPercentage) {
+            result = result.multiply(HUNDRED);
+        }
+        return RatioResult.ok(result);
+    }
+
+    /**
+     * EBITDA Margin = (Operating Profit + Depreciation) / Revenue × 100
+     */
+    private RatioResult calcEbitdaMargin(Map<String, FaFinancialMetricEntity> idx, String period) {
+        var opProfit = getOkValue(idx, MetricCode.OPERATING_PROFIT, period);
+        var depreciation = getOkValue(idx, MetricCode.DEPRECIATION_AMORTIZATION, period);
+        var revenue = getOkValue(idx, MetricCode.REVENUE, period);
+        if (opProfit == null) return RatioResult.missing("Operating profit missing");
+        if (revenue == null || revenue.compareTo(BigDecimal.ZERO) == 0) {
+            return RatioResult.missing("Revenue is zero or missing");
+        }
+        // Depreciation may be missing — treat as 0 if not available
+        BigDecimal dep = depreciation != null ? depreciation : BigDecimal.ZERO;
+        BigDecimal ebitda = opProfit.add(dep);
+        BigDecimal margin = ebitda.divide(revenue, SCALE, RoundingMode.HALF_UP).multiply(HUNDRED);
+        return RatioResult.ok(margin);
+    }
+
+    /**
+     * Debt to Equity = (Short Term Debt + Long Term Debt) / Total Equity
+     */
+    private RatioResult calcDebtToEquity(Map<String, FaFinancialMetricEntity> idx, String period) {
+        var stDebt = getOkValue(idx, MetricCode.SHORT_TERM_DEBT, period);
+        var ltDebt = getOkValue(idx, MetricCode.LONG_TERM_DEBT, period);
+        var equity = getOkValue(idx, MetricCode.TOTAL_EQUITY, period);
+        if (equity == null || equity.compareTo(BigDecimal.ZERO) == 0) {
+            return RatioResult.missing("Total equity is zero or missing");
+        }
+        BigDecimal totalDebt = (stDebt != null ? stDebt : BigDecimal.ZERO)
+                .add(ltDebt != null ? ltDebt : BigDecimal.ZERO);
+        if (totalDebt.compareTo(BigDecimal.ZERO) == 0 && stDebt == null && ltDebt == null) {
+            return RatioResult.missing("Debt data missing");
+        }
+        return RatioResult.ok(totalDebt.divide(equity, SCALE, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * Net Debt = (Short Term Debt + Long Term Debt) - Cash
+     */
+    private RatioResult calcNetDebt(Map<String, FaFinancialMetricEntity> idx, String period) {
+        var stDebt = getOkValue(idx, MetricCode.SHORT_TERM_DEBT, period);
+        var ltDebt = getOkValue(idx, MetricCode.LONG_TERM_DEBT, period);
+        var cash = getOkValue(idx, MetricCode.CASH_AND_EQUIVALENTS, period);
+        if (stDebt == null && ltDebt == null) return RatioResult.missing("Debt data missing");
+        if (cash == null) return RatioResult.missing("Cash data missing");
+        BigDecimal totalDebt = (stDebt != null ? stDebt : BigDecimal.ZERO)
+                .add(ltDebt != null ? ltDebt : BigDecimal.ZERO);
+        return RatioResult.ok(totalDebt.subtract(cash));
+    }
+
+    /**
+     * Quick Ratio = (Current Assets - Inventory) / Current Liabilities
+     */
+    private RatioResult calcQuickRatio(Map<String, FaFinancialMetricEntity> idx, String period) {
+        var currentAssets = getOkValue(idx, MetricCode.CURRENT_ASSETS, period);
+        var inventory = getOkValue(idx, MetricCode.INVENTORY, period);
+        var currentLiabilities = getOkValue(idx, MetricCode.CURRENT_LIABILITIES, period);
+        if (currentAssets == null) return RatioResult.missing("Current assets missing");
+        if (currentLiabilities == null || currentLiabilities.compareTo(BigDecimal.ZERO) == 0) {
+            return RatioResult.missing("Current liabilities is zero or missing");
+        }
+        BigDecimal inv = inventory != null ? inventory : BigDecimal.ZERO;
+        BigDecimal quickAssets = currentAssets.subtract(inv);
+        return RatioResult.ok(quickAssets.divide(currentLiabilities, SCALE, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * Free Cash Flow = CFO - |CAPEX|
+     * CAPEX is typically negative (cash outflow), so we take its absolute value.
+     */
+    private RatioResult calcFreeCashFlow(Map<String, FaFinancialMetricEntity> idx, String period) {
+        var cfo = getOkValue(idx, MetricCode.CFO, period);
+        var capex = getOkValue(idx, MetricCode.CAPEX, period);
+        if (cfo == null) return RatioResult.missing("CFO missing");
+        if (capex == null) return RatioResult.missing("CAPEX missing");
+        // CAPEX is typically negative, so FCF = CFO - |CAPEX| = CFO + CAPEX (if CAPEX is negative)
+        // But to be safe, always use absolute: FCF = CFO - abs(CAPEX)
+        return RatioResult.ok(cfo.subtract(capex.abs()));
+    }
+
+    /**
+     * CAPEX to Revenue = |CAPEX| / Revenue × 100
+     */
+    private RatioResult calcCapexToRevenue(Map<String, FaFinancialMetricEntity> idx, String period) {
+        var capex = getOkValue(idx, MetricCode.CAPEX, period);
+        var revenue = getOkValue(idx, MetricCode.REVENUE, period);
+        if (capex == null) return RatioResult.missing("CAPEX missing");
+        if (revenue == null || revenue.compareTo(BigDecimal.ZERO) == 0) {
+            return RatioResult.missing("Revenue is zero or missing");
+        }
+        return RatioResult.ok(capex.abs().divide(revenue, SCALE, RoundingMode.HALF_UP).multiply(HUNDRED));
     }
 
     // ═══════════════════════════════════════════════════════════════

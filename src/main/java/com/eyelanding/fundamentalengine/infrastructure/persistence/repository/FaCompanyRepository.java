@@ -15,4 +15,8 @@ public interface FaCompanyRepository extends JpaRepository<FaCompanyEntity, Long
     List<FaCompanyEntity> findByExchange(String exchange);
 
     boolean existsByTicker(String ticker);
+
+    List<FaCompanyEntity> findByIsActiveTrue();
+
+    List<FaCompanyEntity> findByExchangeInAndIsActiveTrue(List<String> exchanges);
 }

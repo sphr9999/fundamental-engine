@@ -518,7 +518,12 @@ let charts = {
   financial: null,
   margin: null,
   valuation: null,
-  fa: null
+  fa: null,
+  incomeBreakdown: null,
+  balanceSheet: null,
+  cashFlow: null,
+  debtLeverage: null,
+  assetComposition: null
 };
 async function lookupTicker(ticker) {
   if (!ticker) return;
@@ -532,19 +537,33 @@ async function lookupTicker(ticker) {
   document.getElementById('topSearch').value = ticker;
 
   try {
-    const [overview, ratios, history, financials, pitFinancials] = await Promise.all([
+    const [overview, ratios, history, financials, pitFinancials, bsFinancials, cfFinancials] = await Promise.all([
       fetch(`${API}/tickers/${ticker}/overview`).then(r => r.json()),
       fetch(`${API}/tickers/${ticker}/ratios`).then(r => r.json()).catch(() => null),
       fetch(`${API}/tickers/${ticker}/score-history`).then(r => r.json()).catch(() => null),
       fetch(`${API}/tickers/${ticker}/financials`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/tickers/${ticker}/financials?periodType=POINT_IN_TIME`).then(r => r.json()).catch(() => null)
+      fetch(`${API}/tickers/${ticker}/financials?periodType=POINT_IN_TIME`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/tickers/${ticker}/financials?periodType=QUARTER`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/tickers/${ticker}/financials?periodType=QUARTER`).then(r => r.json()).catch(() => null)
     ]);
     
-    if (financials && pitFinancials && pitFinancials.series) {
-      financials.series = financials.series.concat(pitFinancials.series);
+    // Merge all period types into one financials object
+    const allSeries = [];
+    if (financials?.series) allSeries.push(...financials.series);
+    if (pitFinancials?.series) allSeries.push(...pitFinancials.series);
+    if (bsFinancials?.series) {
+      bsFinancials.series.forEach(s => {
+        if (!allSeries.find(x => x.metricCode === s.metricCode)) allSeries.push(s);
+      });
     }
+    if (cfFinancials?.series) {
+      cfFinancials.series.forEach(s => {
+        if (!allSeries.find(x => x.metricCode === s.metricCode)) allSeries.push(s);
+      });
+    }
+    const mergedFinancials = { ticker, series: allSeries };
     
-    renderTickerDetail(overview, ratios, history, financials);
+    renderTickerDetail(overview, ratios, history, mergedFinancials);
   } catch(e) {
     console.error(e);
     container.innerHTML = `<div class="empty-state" style="color:var(--red)">❌ Không tìm thấy mã <strong>${ticker}</strong></div>`;
@@ -578,36 +597,68 @@ function renderTickerDetail(ov, ratios, history, financials) {
       🇻🇳 Bối cảnh vĩ mô Việt Nam: <strong>Trung lập</strong> · Độ tự tin <strong>54%</strong> · cập nhật <strong>30/06/2026</strong>
     </div>
 
-    <!-- Metric Cards -->
-    <div class="cards-row" style="margin-bottom:32px;">
+    <!-- Metric Cards Row 1: Market Data -->
+    <div class="cards-row" style="margin-bottom:16px;">
       ${metricCard('GIÁ (VND)', fmtPrice(ov.price), '')}
       ${metricCard('P/E (TTM)', fmtN(ov.peTtm, 2), 'lần')}
       ${metricCard('P/B', fmtN(ov.pb, 2), 'lần')}
       ${metricCard('VỐN HÓA (TỶ)', fmtBillions(ov.marketCap), 'tỷ')}
     </div>
 
+    <!-- Metric Cards Row 2: Balance Sheet & Cash Flow -->
+    <div class="cards-row" style="margin-bottom:32px;" id="bs-cf-cards"></div>
+
     <!-- Core Analysis -->
-    <div class="turtle-section-title">Phân tích cơ bản 15 năm</div>
+    <div class="turtle-section-title">Phân tích cơ bản</div>
     <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
-      Ngành: <strong>${ov.industry || 'Phi tài chính'}</strong> · Biên gộp · Tăng trưởng · P/E · P/B
+      Ngành: <strong>${ov.industry || 'Phi tài chính'}</strong> · Biên gộp · Tăng trưởng · P/E · P/B · Bảng cân đối · Dòng tiền
     </div>
 
-    <!-- Charts -->
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 32px;">
+    <!-- Charts Row 1: Income -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
       <div class="card" style="padding: 24px;">
-        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">1. Doanh thu & Lợi nhuận (Tỷ VND)</h3>
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">📊 Doanh thu & Lợi nhuận (Tỷ VND)</h3>
         <div class="chart-container"><canvas id="financialChart"></canvas></div>
       </div>
       <div class="card" style="padding: 24px;">
-        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">2. Biên lợi nhuận (%)</h3>
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">📈 Biên lợi nhuận (%)</h3>
         <div class="chart-container"><canvas id="marginChart"></canvas></div>
       </div>
+    </div>
+
+    <!-- Charts Row 2: Income Breakdown & Valuation -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
       <div class="card" style="padding: 24px;">
-        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">3. Định giá (Giá & P/B)</h3>
-        <div class="chart-container"><canvas id="valuationChart"></canvas></div>
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">🏗️ Cơ cấu chi phí & Lợi nhuận</h3>
+        <div class="chart-container"><canvas id="incomeBreakdownChart"></canvas></div>
       </div>
       <div class="card" style="padding: 24px;">
-        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">4. Lịch sử FA Score</h3>
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">💰 Định giá (Giá & P/B)</h3>
+        <div class="chart-container"><canvas id="valuationChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Charts Row 3: Balance Sheet & Cash Flow -->
+    <div class="turtle-section-title" style="margin-top:40px">Bảng cân đối & Dòng tiền</div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">🏦 Cấu trúc Tài sản & Nguồn vốn (Tỷ VND)</h3>
+        <div class="chart-container"><canvas id="balanceSheetChart"></canvas></div>
+      </div>
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">💵 Dòng tiền (Tỷ VND)</h3>
+        <div class="chart-container"><canvas id="cashFlowChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Charts Row 4: Debt & FA Score -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 32px;">
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">⚖️ Đòn bẩy tài chính</h3>
+        <div class="chart-container"><canvas id="debtLeverageChart"></canvas></div>
+      </div>
+      <div class="card" style="padding: 24px;">
+        <h3 style="font-size:14px; font-weight:600; margin-bottom: 16px;">🎯 Lịch sử FA Score</h3>
         <div class="chart-container"><canvas id="faScoreChart"></canvas></div>
       </div>
     </div>
@@ -648,98 +699,274 @@ function renderTickerDetail(ov, ratios, history, financials) {
 
   Object.values(charts).forEach(c => { if (c) c.destroy(); });
 
+  // ── Helper: find series and build period-value map ──
+  const findSeries = (code) => financials?.series?.find(s => s.metricCode === code);
+  const toB = v => v ? v / 1e9 : null;  // VND → Tỷ VND
+
   if (financials && financials.series && financials.series.length > 0) {
-    const sRev = financials.series.find(s => s.metricCode === 'REVENUE');
-    const sNpat = financials.series.find(s => s.metricCode === 'NPAT');
-    const sGross = financials.series.find(s => s.metricCode === 'GROSS_PROFIT');
-    const sPrice = financials.series.find(s => s.metricCode === 'CLOSE_PRICE');
-    const sPb = financials.series.find(s => s.metricCode === 'PB');
-    
-    let revs = sRev ? [...sRev.values] : [];
-    revs.sort((a, b) => a.period.localeCompare(b.period));
-    const labels = revs.map(r => r.period);
-    
-    // Map values by period
+    const sRev = findSeries('REVENUE');
+    const sNpat = findSeries('NPAT');
+    const sGross = findSeries('GROSS_PROFIT');
+    const sPrice = findSeries('CLOSE_PRICE');
+    const sPb = findSeries('PB');
+    const sCogs = findSeries('COST_OF_SALES');
+    const sOpProfit = findSeries('OPERATING_PROFIT');
+    const sSelling = findSeries('SELLING_EXPENSES');
+    const sAdmin = findSeries('ADMIN_EXPENSES');
+    const sFinExp = findSeries('FINANCIAL_EXPENSES');
+
+    // Balance Sheet series
+    const sTotalAssets = findSeries('TOTAL_ASSETS');
+    const sCurrentAssets = findSeries('CURRENT_ASSETS');
+    const sTotalLiab = findSeries('TOTAL_LIABILITIES');
+    const sCurrentLiab = findSeries('CURRENT_LIABILITIES');
+    const sTotalEquity = findSeries('TOTAL_EQUITY');
+    const sCash = findSeries('CASH_AND_EQUIVALENTS');
+    const sInventory = findSeries('INVENTORY');
+    const sReceivable = findSeries('ACCOUNTS_RECEIVABLE');
+    const sFixedAssets = findSeries('FIXED_ASSETS_NET');
+    const sShortDebt = findSeries('SHORT_TERM_DEBT');
+    const sLongDebt = findSeries('LONG_TERM_DEBT');
+
+    // Cash Flow series
+    const sCfo = findSeries('CFO');
+    const sCfi = findSeries('CFI');
+    const sCff = findSeries('CFF');
+    const sCapex = findSeries('CAPEX');
+
+    // Build labels from revenue or total assets
+    const primarySeries = sRev || sTotalAssets;
+    let entries = primarySeries ? [...primarySeries.values] : [];
+    entries.sort((a, b) => a.period.localeCompare(b.period));
+    const labels = entries.map(r => r.period);
+
     const mapVal = (series) => {
       const m = {};
       if (series) series.values.forEach(v => m[v.period] = parseFloat(v.value));
-      return labels.map(l => m[l] || null);
+      return labels.map(l => m[l] ?? null);
     };
 
-    const revData = mapVal(sRev).map(v => v ? v / 1e9 : null);
-    const npatData = mapVal(sNpat).map(v => v ? v / 1e9 : null);
+    const revData = mapVal(sRev).map(toB);
+    const npatData = mapVal(sNpat).map(toB);
     const grossData = mapVal(sGross);
-    
+    const cogsData = mapVal(sCogs).map(v => v ? Math.abs(v) / 1e9 : null);
+    const sellingData = mapVal(sSelling).map(v => v ? Math.abs(v) / 1e9 : null);
+    const adminData = mapVal(sAdmin).map(v => v ? Math.abs(v) / 1e9 : null);
+    const finExpData = mapVal(sFinExp).map(v => v ? Math.abs(v) / 1e9 : null);
+    const opProfitData = mapVal(sOpProfit).map(toB);
+
     // Margins
     const grossMargin = revData.map((v, i) => (v && grossData[i]) ? (grossData[i] / (v * 1e9)) * 100 : null);
     const netMargin = revData.map((v, i) => (v && npatData[i]) ? (npatData[i] / v) * 100 : null);
+    const opMargin = revData.map((v, i) => (v && opProfitData[i]) ? (opProfitData[i] / v) * 100 : null);
 
     // Valuation
     const priceData = mapVal(sPrice);
     const pbData = mapVal(sPb);
 
-    // 1. Financial Chart (Bar)
+    // BS data
+    const totalAssetsData = mapVal(sTotalAssets).map(toB);
+    const currentAssetsData = mapVal(sCurrentAssets).map(toB);
+    const totalLiabData = mapVal(sTotalLiab).map(toB);
+    const currentLiabData = mapVal(sCurrentLiab).map(toB);
+    const totalEquityData = mapVal(sTotalEquity).map(toB);
+    const cashData = mapVal(sCash).map(toB);
+    const inventoryData = mapVal(sInventory).map(toB);
+    const receivableData = mapVal(sReceivable).map(toB);
+    const fixedAssetsData = mapVal(sFixedAssets).map(toB);
+    const shortDebtData = mapVal(sShortDebt).map(toB);
+    const longDebtData = mapVal(sLongDebt).map(toB);
+
+    // CF data
+    const cfoData = mapVal(sCfo).map(toB);
+    const cfiData = mapVal(sCfi).map(toB);
+    const cffData = mapVal(sCff).map(toB);
+    const capexData = mapVal(sCapex).map(v => v ? Math.abs(v) / 1e9 : null);
+
+    // ── Populate BS/CF metric cards ──
+    const latestIdx = totalAssetsData.length - 1;
+    const bsCfCards = document.getElementById('bs-cf-cards');
+    if (bsCfCards) {
+      const latestTA = totalAssetsData[latestIdx];
+      const latestTE = totalEquityData[latestIdx];
+      const latestTL = totalLiabData[latestIdx];
+      const latestCash = cashData[latestIdx];
+      const latestCfo = cfoData[latestIdx];
+      const de = (latestTL && latestTE && latestTE > 0) ? (latestTL / latestTE).toFixed(2) : '—';
+      const roe = (npatData[latestIdx] && latestTE && latestTE > 0) ? ((npatData[latestIdx] / latestTE) * 100).toFixed(1) + '%' : '—';
+      bsCfCards.innerHTML = `
+        ${metricCard('TỔNG TÀI SẢN', latestTA ? fmtN(latestTA, 0) : '—', 'Tỷ VND')}
+        ${metricCard('VỐN CHỦ SỞ HỮU', latestTE ? fmtN(latestTE, 0) : '—', 'Tỷ VND')}
+        ${metricCard('D/E RATIO', de, 'Nợ / Vốn CSH')}
+        ${metricCard('TIỀN MẶT', latestCash ? fmtN(latestCash, 0) : '—', 'Tỷ VND')}
+        ${metricCard('CFO', latestCfo ? fmtN(latestCfo, 0) : '—', 'Tỷ VND')}
+        ${metricCard('ROE', roe, 'LNST / Vốn CSH')}
+      `;
+    }
+
+    // ═══ CHART 1: Revenue & NPAT ═══
     charts.financial = new Chart(document.getElementById('financialChart').getContext('2d'), {
       type: 'bar',
       data: {
-        labels: labels,
+        labels,
         datasets: [
-          { label: 'Doanh thu (Tỷ)', data: revData, backgroundColor: '#4c9aff', borderRadius: 4 },
-          { label: 'Lợi nhuận (Tỷ)', data: npatData, backgroundColor: '#4caf50', borderRadius: 4 }
+          { label: 'Doanh thu', data: revData, backgroundColor: 'rgba(76,154,255,0.8)', borderRadius: 4 },
+          { label: 'LN Gộp', data: grossData.map(toB), backgroundColor: 'rgba(0,188,212,0.6)', borderRadius: 4 },
+          { label: 'LNST', data: npatData, backgroundColor: 'rgba(76,175,80,0.8)', borderRadius: 4 }
         ]
       },
       options: commonOptions
     });
 
-    // 2. Margin Chart (Line)
+    // ═══ CHART 2: Margins ═══
     charts.margin = new Chart(document.getElementById('marginChart').getContext('2d'), {
       type: 'line',
       data: {
-        labels: labels,
+        labels,
         datasets: [
-          { label: 'Biên LN Gộp (%)', data: grossMargin, borderColor: '#ff9800', backgroundColor: '#ff9800', tension: 0.3 },
-          { label: 'Biên LN Ròng (%)', data: netMargin, borderColor: '#00bcd4', backgroundColor: '#00bcd4', tension: 0.3 }
+          { label: 'Biên gộp (%)', data: grossMargin, borderColor: '#ff9800', backgroundColor: 'rgba(255,152,0,0.1)', fill: true, tension: 0.3 },
+          { label: 'Biên HĐKD (%)', data: opMargin, borderColor: '#ba68c8', backgroundColor: 'rgba(186,104,200,0.1)', fill: true, tension: 0.3 },
+          { label: 'Biên ròng (%)', data: netMargin, borderColor: '#00bcd4', backgroundColor: 'rgba(0,188,212,0.1)', fill: true, tension: 0.3 }
         ]
       },
       options: commonOptions
     });
 
-    // 3. Valuation Chart (Mixed)
+    // ═══ CHART 3: Income Breakdown (Stacked bar) ═══
+    const hasIncomeBreakdown = cogsData.some(v => v != null);
+    if (hasIncomeBreakdown) {
+      charts.incomeBreakdown = new Chart(document.getElementById('incomeBreakdownChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Giá vốn', data: cogsData, backgroundColor: 'rgba(244,67,54,0.6)', stack: 'costs' },
+            { label: 'CP Bán hàng', data: sellingData, backgroundColor: 'rgba(255,152,0,0.6)', stack: 'costs' },
+            { label: 'CP Quản lý', data: adminData, backgroundColor: 'rgba(255,193,7,0.6)', stack: 'costs' },
+            { label: 'CP Tài chính', data: finExpData, backgroundColor: 'rgba(156,39,176,0.5)', stack: 'costs' },
+            { label: 'LNST', data: npatData.map(v => v && v > 0 ? v : null), backgroundColor: 'rgba(76,175,80,0.7)', stack: 'costs' }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          plugins: { ...commonOptions.plugins, tooltip: { mode: 'index', intersect: false } },
+          scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: '#1e2532' } } }
+        }
+      });
+    }
+
+    // ═══ CHART 4: Valuation ═══
     charts.valuation = new Chart(document.getElementById('valuationChart').getContext('2d'), {
       type: 'bar',
       data: {
-        labels: labels,
+        labels,
         datasets: [
-          { type: 'line', label: 'Giá (VND)', data: priceData, borderColor: '#ba68c8', backgroundColor: '#ba68c8', tension: 0.2, yAxisID: 'y1' },
-          { type: 'bar', label: 'P/B', data: pbData, backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 2, yAxisID: 'y' }
+          { type: 'line', label: 'Giá (VND)', data: priceData, borderColor: '#ba68c8', backgroundColor: '#ba68c8', tension: 0.2, yAxisID: 'y1', pointRadius: 2 },
+          { type: 'bar', label: 'P/B', data: pbData, backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderRadius: 2, yAxisID: 'y' }
         ]
       },
       options: {
         ...commonOptions,
         scales: {
           x: { grid: { display: false } },
-          y: { type: 'linear', display: true, position: 'left', grid: { color: '#1e2532' } },
-          y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+          y: { type: 'linear', display: true, position: 'left', grid: { color: '#1e2532' }, title: { display: true, text: 'P/B', color: '#8893a0' } },
+          y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Giá (VND)', color: '#8893a0' } }
         }
       }
     });
+
+    // ═══ CHART 5: Balance Sheet Structure ═══
+    const hasBs = totalAssetsData.some(v => v != null);
+    if (hasBs) {
+      const nonCurrentAssets = totalAssetsData.map((ta, i) => (ta && currentAssetsData[i]) ? ta - currentAssetsData[i] : null);
+      const longTermLiab = totalLiabData.map((tl, i) => (tl && currentLiabData[i]) ? tl - currentLiabData[i] : null);
+
+      charts.balanceSheet = new Chart(document.getElementById('balanceSheetChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'TS ngắn hạn', data: currentAssetsData, backgroundColor: 'rgba(76,154,255,0.7)', stack: 'assets' },
+            { label: 'TS dài hạn', data: nonCurrentAssets, backgroundColor: 'rgba(0,188,212,0.5)', stack: 'assets' },
+            { label: 'Nợ NH', data: currentLiabData.map(v => v ? -v : null), backgroundColor: 'rgba(255,152,0,0.6)', stack: 'liab' },
+            { label: 'Nợ DH', data: longTermLiab.map(v => v ? -v : null), backgroundColor: 'rgba(244,67,54,0.5)', stack: 'liab' },
+            { label: 'Vốn CSH', data: totalEquityData.map(v => v ? -v : null), backgroundColor: 'rgba(76,175,80,0.6)', stack: 'liab' }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          plugins: { ...commonOptions.plugins, tooltip: { mode: 'index', intersect: false, callbacks: {
+            label: ctx => ctx.dataset.label + ': ' + fmtN(Math.abs(ctx.raw), 0) + ' Tỷ'
+          } } },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, grid: { color: '#1e2532' }, ticks: { callback: v => fmtN(Math.abs(v), 0) } }
+          }
+        }
+      });
+    }
+
+    // ═══ CHART 6: Cash Flow ═══
+    const hasCf = cfoData.some(v => v != null);
+    if (hasCf) {
+      charts.cashFlow = new Chart(document.getElementById('cashFlowChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'CFO (HĐKD)', data: cfoData, backgroundColor: cfoData.map(v => v >= 0 ? 'rgba(76,175,80,0.7)' : 'rgba(244,67,54,0.7)'), borderRadius: 3 },
+            { label: 'CFI (Đầu tư)', data: cfiData, backgroundColor: 'rgba(255,152,0,0.6)', borderRadius: 3 },
+            { label: 'CFF (Tài chính)', data: cffData, backgroundColor: 'rgba(156,39,176,0.5)', borderRadius: 3 }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          plugins: { ...commonOptions.plugins, tooltip: { mode: 'index', intersect: false } }
+        }
+      });
+    }
+
+    // ═══ CHART 7: Debt & Leverage Ratios ═══
+    if (hasBs) {
+      const deRatio = totalLiabData.map((tl, i) => (tl && totalEquityData[i] && totalEquityData[i] > 0) ? tl / totalEquityData[i] : null);
+      const currentRatio = currentAssetsData.map((ca, i) => (ca && currentLiabData[i] && currentLiabData[i] > 0) ? ca / currentLiabData[i] : null);
+      const debtToAssets = totalLiabData.map((tl, i) => (tl && totalAssetsData[i] && totalAssetsData[i] > 0) ? (tl / totalAssetsData[i]) * 100 : null);
+
+      charts.debtLeverage = new Chart(document.getElementById('debtLeverageChart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'D/E Ratio', data: deRatio, borderColor: '#f44336', backgroundColor: 'rgba(244,67,54,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
+            { label: 'Current Ratio', data: currentRatio, borderColor: '#4caf50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
+            { label: 'Nợ/Tài sản (%)', data: debtToAssets, borderColor: '#ff9800', tension: 0.3, yAxisID: 'y1', borderDash: [5, 5] }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            x: { grid: { display: false } },
+            y: { type: 'linear', display: true, position: 'left', grid: { color: '#1e2532' }, title: { display: true, text: 'Ratio', color: '#8893a0' } },
+            y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '%', color: '#8893a0' } }
+          }
+        }
+      });
+    }
   }
 
-  // 4. FA Score History (Line Area)
+  // ═══ CHART 8: FA Score History ═══
   if (history && history.history) {
     let hist = [...history.history].sort((a, b) => a.period.localeCompare(b.period));
     charts.fa = new Chart(document.getElementById('faScoreChart').getContext('2d'), {
       type: 'line',
       data: {
         labels: hist.map(h => h.period),
-        datasets: [{
-          label: 'FA Score',
-          data: hist.map(h => h.overallScore),
-          borderColor: '#4caf50',
-          backgroundColor: 'rgba(76, 175, 80, 0.1)',
-          fill: true,
-          tension: 0.3
-        }]
+        datasets: [
+          { label: 'FA Score', data: hist.map(h => h.overallScore), borderColor: '#4caf50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3, pointRadius: 3 },
+          { label: 'Growth', data: hist.map(h => h.growthScore), borderColor: '#4c9aff', tension: 0.3, pointRadius: 2, borderDash: [3, 3] },
+          { label: 'Profitability', data: hist.map(h => h.profitabilityScore), borderColor: '#00bcd4', tension: 0.3, pointRadius: 2, borderDash: [3, 3] },
+          { label: 'Valuation', data: hist.map(h => h.valuationScore), borderColor: '#ba68c8', tension: 0.3, pointRadius: 2, borderDash: [3, 3] }
+        ]
       },
       options: {
         ...commonOptions,

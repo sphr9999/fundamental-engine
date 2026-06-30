@@ -166,10 +166,14 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!--		Redis-->
+        <!--		Cache: Caffeine (in-memory, no external Redis needed) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
         </dependency>
 
 
